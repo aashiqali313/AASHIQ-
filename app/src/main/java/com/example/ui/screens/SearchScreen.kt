@@ -71,8 +71,10 @@ fun SearchScreen(
                     TextField(
                         value = searchQuery,
                         onValueChange = { viewModel.setSearchQuery(it) },
-                        placeholder = { Text("Search courses, lessons, notes...", color = Color(0x80FFFFFF), fontSize = 14.sp) },
+                        placeholder = { Text("Search courses, lessons, notes...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), fontSize = 14.sp) },
                         colors = TextFieldDefaults.colors(
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
                             focusedContainerColor = Color.Transparent,
                             unfocusedContainerColor = Color.Transparent,
                             disabledContainerColor = Color.Transparent,
@@ -141,13 +143,13 @@ fun SearchScreen(
                         items(recentSearches) { term ->
                             Box(
                                 modifier = Modifier
-                                    .background(Color(0x10FFFFFF), RoundedCornerShape(100))
+                                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), RoundedCornerShape(100))
                                     .clickable {
                                         viewModel.setSearchQuery(term)
                                     }
                                     .padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
-                                Text(term, fontSize = 11.sp, color = Color.White)
+                                Text(term, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
                             }
                         }
                     }
@@ -167,7 +169,7 @@ fun SearchScreen(
                         Icon(
                             Icons.Default.Search,
                             contentDescription = null,
-                            tint = Color(0x30FFFFFF),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
                             modifier = Modifier.size(56.dp)
                         )
                         Spacer(modifier = Modifier.height(14.dp))
@@ -176,12 +178,12 @@ fun SearchScreen(
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             letterSpacing = 1.sp,
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             "Type keywords to crawl through courses, lesson lectures & notes fully offline",
                             fontSize = 11.sp,
-                            color = Color(0xFFAEAEB2),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 4.dp)
                         )
@@ -207,14 +209,14 @@ fun SearchScreen(
                             "NO SEARCH RESULTS",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             letterSpacing = 1.sp
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             "We couldn't locate any matches for '$searchQuery'. Please check spelling or verify course imports.",
                             fontSize = 11.sp,
-                            color = Color(0xFFAEAEB2),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 32.dp)
                         )
@@ -260,11 +262,11 @@ fun SearchScreen(
                                 )
                                 Spacer(modifier = Modifier.width(14.dp))
                                 Column {
-                                    Text(course.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
-                                    Text(course.author, style = MaterialTheme.typography.bodySmall, color = Color(0xFFAEAEB2))
+                                    Text(course.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                    Text(course.author, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
-                            HorizontalDivider(color = Color(0x0AFFFFFF), modifier = Modifier.padding(horizontal = 16.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), modifier = Modifier.padding(horizontal = 16.dp))
                         }
                     }
 
@@ -293,16 +295,16 @@ fun SearchScreen(
                                 Icon(
                                     Icons.Default.PlayArrow,
                                     contentDescription = null,
-                                    tint = Color.White,
+                                    tint = MaterialTheme.colorScheme.onSurface,
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(14.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(lesson.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
+                                    Text(lesson.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                                     Text(
                                         "Inside course: ${course.title}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFFAEAEB2),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -310,10 +312,10 @@ fun SearchScreen(
                                 Icon(
                                     Icons.Default.PlayArrow,
                                     contentDescription = null,
-                                    tint = Color.DarkGray
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                                 )
                             }
-                            HorizontalDivider(color = Color(0x0AFFFFFF), modifier = Modifier.padding(horizontal = 16.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), modifier = Modifier.padding(horizontal = 16.dp))
                         }
                     }
                 }

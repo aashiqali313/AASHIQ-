@@ -60,19 +60,19 @@ fun SettingsScreen(
                 
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.fillMaxWidth().border(1.dp, Color(0x10FFFFFF), RoundedCornerShape(12.dp))
+                    modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
                             "Visual Themes",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             "Choose your layout theme mode",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFAEAEB2),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
 
@@ -95,11 +95,11 @@ fun SettingsScreen(
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(
                                             if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                                            else Color(0x05FFFFFF)
+                                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
                                         )
                                         .border(
                                             width = 1.dp,
-                                            color = if (isActive) MaterialTheme.colorScheme.primary else Color(0x1AFFFFFF),
+                                            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f),
                                             shape = RoundedCornerShape(8.dp)
                                         )
                                         .clickable { viewModel.updateTheme(mode) }
@@ -110,7 +110,7 @@ fun SettingsScreen(
                                         text = label,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isActive) MaterialTheme.colorScheme.primary else Color.White
+                                        color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                             }
@@ -126,7 +126,7 @@ fun SettingsScreen(
 
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.fillMaxWidth().border(1.dp, Color(0x10FFFFFF), RoundedCornerShape(12.dp))
+                    modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                         // Default Speed
@@ -139,13 +139,13 @@ fun SettingsScreen(
                                 Text(
                                     "Default Speed",
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 14.sp
                                 )
                                 Text(
                                     "Initial playback velocity for lessons",
                                     fontSize = 11.sp,
-                                    color = Color(0xFFAEAEB2)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
@@ -157,7 +157,7 @@ fun SettingsScreen(
                                     Box(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(6.dp))
-                                            .background(if (isSelected) MaterialTheme.colorScheme.primary else Color(0x10FFFFFF))
+                                            .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                                             .clickable { viewModel.updateDefaultPlaybackSpeed(speedOption) }
                                             .padding(horizontal = 8.dp, vertical = 4.dp)
                                     ) {
@@ -165,14 +165,14 @@ fun SettingsScreen(
                                             "${speedOption}x",
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else Color.White
+                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                                         )
                                     }
                                 }
                             }
                         }
 
-                        HorizontalDivider(color = Color(0x0AFFFFFF))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
 
                         // Autoplay toggle
                         Row(
@@ -184,13 +184,13 @@ fun SettingsScreen(
                                 Text(
                                     "Autoplay next lesson",
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 14.sp
                                 )
                                 Text(
                                     "Automatically start next lesson in queue",
                                     fontSize = 11.sp,
-                                    color = Color(0xFFAEAEB2)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Switch(
@@ -214,7 +214,7 @@ fun SettingsScreen(
 
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    modifier = Modifier.fillMaxWidth().border(1.dp, Color(0x10FFFFFF), RoundedCornerShape(12.dp))
+                    modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(
@@ -226,13 +226,13 @@ fun SettingsScreen(
                                 Text(
                                     "Animation intensity",
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     fontSize = 14.sp
                                 )
                                 Text(
                                     "Enable high-fidelity sliding drawer transitions",
                                     fontSize = 11.sp,
-                                    color = Color(0xFFAEAEB2)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Switch(
@@ -267,7 +267,7 @@ fun SettingsScreen(
                     Text(
                         "Made for elegant offline local course consumption",
                         fontSize = 10.sp,
-                        color = Color(0xFFAEAEB2)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

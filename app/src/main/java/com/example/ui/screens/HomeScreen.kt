@@ -709,14 +709,14 @@ fun EmptyCatalogState(onImportClick: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(90.dp)
-                .background(Color(0xFF131316), CircleShape)
-                .border(1.dp, Color(0x20D4AF37), CircleShape),
+                .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 Icons.Default.Star,
                 contentDescription = null,
-                tint = Color(0x7FD4AF37),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
                 modifier = Modifier.size(44.dp)
             )
         }
@@ -725,7 +725,7 @@ fun EmptyCatalogState(onImportClick: () -> Unit) {
             "NO LOCAL COURSES FOUND",
             fontWeight = FontWeight.Bold,
             fontSize = 15.sp,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             letterSpacing = 1.5.sp
         )
         Spacer(modifier = Modifier.height(6.dp))
@@ -733,7 +733,7 @@ fun EmptyCatalogState(onImportClick: () -> Unit) {
             "Access high-fidelity cinematic video tutorials fully offline. Connect local folders using secure SAF imports to build your list.",
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFFAEAEB2),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp)
         )
         Spacer(modifier = Modifier.height(20.dp))
@@ -762,7 +762,7 @@ fun ShimmerLoadingCatalog() {
                     .fillMaxWidth()
                     .height(100.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(Color(0xFF1E1E22))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
                     .drawWithContent {
                         // Drawing static dark shimmering bounds for elegant rendering
                         drawContent()

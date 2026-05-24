@@ -61,7 +61,7 @@ fun BookmarksScreen(
                         Icon(
                             Icons.Default.FavoriteBorder,
                             contentDescription = null,
-                            tint = Color(0x30FFFFFF),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
                             modifier = Modifier.size(60.dp)
                         )
                         Spacer(modifier = Modifier.height(14.dp))
@@ -69,14 +69,14 @@ fun BookmarksScreen(
                             "NO BOOKMARKS SAVED",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             letterSpacing = 1.sp
                         )
                         Text(
                             "Create bookmark checkpoints in lessons to quickly revisit historic clips offline.",
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFAEAEB2),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = 32.dp, end = 32.dp, top = 4.dp)
                         )
                     }
@@ -120,9 +120,9 @@ fun BookmarksScreen(
                                     )
                                     Spacer(modifier = Modifier.width(14.dp))
                                     Column {
-                                        Text(bmrk.lessonTitle, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text(bmrk.lessonTitle, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                         Text(courseTitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                                        Text("Saved bookmark stamp: ${formatDuration(bmrk.timestamp / 1000)}", fontSize = 11.sp, color = Color(0xFFAEAEB2))
+                                        Text("Saved bookmark stamp: ${formatDuration(bmrk.timestamp / 1000)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
 

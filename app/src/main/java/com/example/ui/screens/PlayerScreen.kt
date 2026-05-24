@@ -550,7 +550,7 @@ fun PlayerScreen(
                         ) {
                             listOf(0.5f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speedOption ->
                                 DropdownMenuItem(
-                                    text = { Text("${speedOption}x", color = Color.White) },
+                                    text = { Text("${speedOption}x", color = MaterialTheme.colorScheme.onSurface) },
                                     onClick = {
                                         currentSpeed = speedOption
                                         exoPlayer.setPlaybackSpeed(speedOption)
@@ -659,7 +659,7 @@ fun PlayerScreen(
                                                 les.title,
                                                 fontSize = 13.sp,
                                                 fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                                                color = if (isCurrent) MaterialTheme.colorScheme.primary else Color.White
+                                                color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                             )
                                             Text(
                                                 "Length: ${formatDuration(les.duration.toLong())}",
@@ -729,7 +729,7 @@ fun PlayerScreen(
                                     Icon(
                                         Icons.Default.FavoriteBorder,
                                         contentDescription = null,
-                                        tint = Color(0x30FFFFFF),
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
                                         modifier = Modifier.size(40.dp)
                                     )
                                     Spacer(modifier = Modifier.height(10.dp))
@@ -772,7 +772,7 @@ fun PlayerScreen(
                                                     "Bookmark Stamp",
                                                     fontSize = 13.sp,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = Color.White
+                                                    color = MaterialTheme.colorScheme.onSurface
                                                 )
                                                 Text(
                                                     "Timestamp: ${formatDuration(bmrk.timestamp / 1000)}",
@@ -838,7 +838,7 @@ fun MarkdownNotesRenderer(text: String, modifier: Modifier = Modifier) {
                     text = headerText,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(vertical = 8.dp),
                     fontFamily = FontFamily.SansSerif
                 )
@@ -895,7 +895,7 @@ fun MarkdownNotesRenderer(text: String, modifier: Modifier = Modifier) {
                 Text(
                     text = trimmed,
                     fontSize = 13.sp,
-                    color = Color(0xFFE2E2E7),
+                    color = MaterialTheme.colorScheme.onSurface,
                     lineHeight = 20.sp,
                     modifier = Modifier.padding(vertical = 4.dp),
                     fontFamily = FontFamily.SansSerif

@@ -154,7 +154,7 @@ fun CourseDetailScreen(
                                 course.title,
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
+                                color = MaterialTheme.colorScheme.onBackground
                             )
                             
                             Spacer(modifier = Modifier.height(16.dp))
@@ -241,13 +241,13 @@ fun CourseDetailScreen(
                                 "Description",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 course.description,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFFAEAEB2),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 lineHeight = 20.sp
                             )
                         }
@@ -259,7 +259,7 @@ fun CourseDetailScreen(
                             "Course Modules",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                         )
                     }
@@ -269,7 +269,7 @@ fun CourseDetailScreen(
                         item {
                             Text(
                                 "No modules specified for this learning series.",
-                                color = Color(0xFFAEAEB2),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(16.dp)
                             )
                         }
@@ -281,7 +281,7 @@ fun CourseDetailScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp, vertical = 6.dp)
-                                    .border(1.dp, Color(0x10FFFFFF), RoundedCornerShape(12.dp))
+                                    .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                                     .clip(RoundedCornerShape(12.dp))
                             ) {
                                 // Accordion Header Row
@@ -293,7 +293,7 @@ fun CourseDetailScreen(
                                         .padding(horizontal = 16.dp, vertical = 14.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
+                                  ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier.weight(1f)
@@ -306,18 +306,18 @@ fun CourseDetailScreen(
                                         )
                                         Spacer(modifier = Modifier.width(10.dp))
                                         Text(
-                                        module.title,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                            module.title,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                     Icon(
                                         if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                         contentDescription = if (isExpanded) "Collapse" else "Expand",
-                                        tint = Color(0xFFAEAEB2)
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
 
@@ -347,7 +347,7 @@ fun CourseDetailScreen(
                                                         .size(24.dp)
                                                         .background(
                                                             color = if (isCompleted) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                                            else Color(0x10FFFFFF),
+                                                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
                                                             shape = CircleShape
                                                         ),
                                                     contentAlignment = Alignment.Center
