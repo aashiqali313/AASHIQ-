@@ -32,6 +32,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.documentfile.provider.DocumentFile
 import androidx.media3.common.Player
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -71,6 +75,9 @@ fun PlayerScreen(
 
     // Speed setting
     var playbackSpeed by remember { mutableFloatStateOf(settings.defaultSpeed) }
+
+    // Fullscreen state
+    var isFullscreen by remember { mutableStateOf(false) }
 
     // Preload lesson media
     LaunchedEffect(lessonId) {
@@ -137,13 +144,46 @@ fun PlayerScreen(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = Color.Black
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
+        if (isFullscreen) {
+            FullscreenPlayerView(
+                viewModel = viewModel,
+                activeLesson = activeLesson,
+                isPlaying = isPlaying,
+                currentPosition = currentPosition,
+                totalDuration = totalDuration,
+                playbackSpeed = playbackSpeed,
+                subtitlesActive = subtitlesActive,
+                onPlayPauseToggle = {
+                    val player = viewModel.exoPlayer ?: return@FullscreenPlayerView
+                    if (player.isPlaying) {
+                        player.pause()
+                        isPlaying = false
+                    } else {
+                        player.play()
+                        isPlaying = true
+                    }
+                },
+                onSeek = { ratio ->
+                    val player = viewModel.exoPlayer ?: return@FullscreenPlayerView
+                    val target = (ratio * totalDuration).toLong()
+                    player.seekTo(target)
+                    currentPosition = target
+                },
+                onSpeedChanged = {
+                    playbackSpeed = it
+                    viewModel.exoPlayer?.setPlaybackSpeed(it)
+                },
+                onSubtitleToggle = { subtitlesActive = !subtitlesActive },
+                onExitFullscreen = { isFullscreen = false }
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
             // BACK BUTTON ROW (PORTRAIT FLOATING INTERFACE)
             Row(
                 modifier = Modifier
@@ -301,7 +341,8 @@ fun PlayerScreen(
                 },
                 onSubtitleToggle = { subtitlesActive = !subtitlesActive },
                 onBookmarkToggle = { viewModel.toggleBookmark(activeLesson.id) },
-                isBookmarked = activeLesson.isBookmarked
+                isBookmarked = activeLesson.isBookmarked,
+                onFullscreenToggle = { isFullscreen = true }
             )
 
             // 3. EXPANDABLE tabs section (Learning notes | Course Index | PDF Reader)
@@ -341,7 +382,7 @@ fun PlayerScreen(
                             viewModel.selectedLessonId.value = id
                         }
                     )
-                    2 -> PdfViewerMockContent()
+                    2 -> PdfViewerMockContent(pdfUri = activeLesson.pdfUri)
                 }
 
                 if (noteSaveAlertVisible) {
@@ -377,6 +418,7 @@ fun PlayerScreen(
                 }
             }
         }
+        }
     }
 }
 
@@ -392,7 +434,8 @@ fun PlayerToolbarOverlay(
     onSpeedChanged: (Float) -> Unit,
     onSubtitleToggle: () -> Unit,
     onBookmarkToggle: () -> Unit,
-    isBookmarked: Boolean
+    isBookmarked: Boolean,
+    onFullscreenToggle: () -> Unit
 ) {
     Surface(
         color = Color(0xFF141414),
@@ -481,6 +524,21 @@ fun PlayerToolbarOverlay(
                             imageVector = Icons.Default.ClosedCaption,
                             contentDescription = "Toggle Subtitles",
                             tint = if (subtitlesActive) PremiumGold else Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    // Fullscreen button
+                    IconButton(
+                        onClick = onFullscreenToggle,
+                        modifier = Modifier
+                            .size(30.dp)
+                            .background(Color(0xFF1C1C1C), RoundedCornerShape(4.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Fullscreen,
+                            contentDescription = "Enter Fullscreen",
+                            tint = Color.White,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -718,7 +776,23 @@ fun LessonsTabContent(
 }
 
 @Composable
-fun PdfViewerMockContent() {
+fun PdfViewerMockContent(pdfUri: String?) {
+    val context = LocalContext.current
+    val pdfName = remember(pdfUri) {
+        if (!pdfUri.isNullOrEmpty()) {
+            try {
+                val uri = Uri.parse(pdfUri)
+                // Try reading real filename from Uri path or document file
+                val file = DocumentFile.fromSingleUri(context, uri)
+                file?.name ?: uri.lastPathSegment ?: "Chapter_Attachment.pdf"
+            } catch (e: Exception) {
+                "Chapter_Attachment.pdf"
+            }
+        } else {
+            "Cinematic_Composition_AASHI_01.pdf"
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -729,46 +803,69 @@ fun PdfViewerMockContent() {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(200.dp)
+                .height(210.dp)
                 .background(Color(0xFF141414), RoundedCornerShape(8.dp))
-                .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(8.dp)),
+                .border(0.5.dp, Color(0xFF2A2A2A), RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(16.dp)
+            ) {
                 Icon(
                     imageVector = Icons.Default.Description,
                     contentDescription = null,
                     tint = PremiumGold,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(44.dp)
                 )
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "LOCAL ATTACHED PDF MEMORY PREVIEW",
-                    color = Color.White,
+                    text = if (!pdfUri.isNullOrEmpty()) "IMPORTED STUDY MATERIAL" else "PREMIUM CURATED CURRICULUM SHEET",
+                    color = PremiumGold,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "AASHI_PDF_CORE017.pdf • 16 pages cached",
-                    color = SubduedGray,
-                    fontSize = 10.sp
+                    text = pdfName,
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(14.dp))
                 
-                // Mock Zoom/Page select
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = {}, modifier = Modifier.size(24.dp).background(Color(0xFF222222), CircleShape)) {
-                        Icon(imageVector = Icons.Default.Remove, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                if (!pdfUri.isNullOrEmpty()) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Button(
+                        onClick = {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(Uri.parse(pdfUri), "application/pdf")
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "No PDF Reader App found on device", Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PremiumGold),
+                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("OPEN PDF NATIVELY", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
-                    Text(text = "100%", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                    IconButton(onClick = {}, modifier = Modifier.size(24.dp).background(Color(0xFF222222), CircleShape)) {
-                        Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
-                    }
+                } else {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "12 pages detailed curriculum notes cached",
+                        color = SubduedGray,
+                        fontSize = 11.sp
+                    )
                 }
             }
         }
@@ -776,10 +873,305 @@ fun PdfViewerMockContent() {
         Text(
             text = "✓ PDF document read progress automatically synced offline to current lesson metadata.",
             color = Color(0xFF81C784),
-            fontSize = 10.sp,
+            fontSize = 11.sp,
             textAlign = TextAlign.Center,
-            lineHeight = 14.sp
+            lineHeight = 15.sp
         )
+    }
+}
+
+@Composable
+fun FullscreenPlayerView(
+    viewModel: AppViewModel,
+    activeLesson: LessonEntity,
+    isPlaying: Boolean,
+    currentPosition: Long,
+    totalDuration: Long,
+    playbackSpeed: Float,
+    subtitlesActive: Boolean,
+    onPlayPauseToggle: () -> Unit,
+    onSeek: (Float) -> Unit,
+    onSpeedChanged: (Float) -> Unit,
+    onSubtitleToggle: () -> Unit,
+    onExitFullscreen: () -> Unit
+) {
+    var controlsVisible by remember { mutableStateOf(true) }
+    var gestureIndicatorText by remember { mutableStateOf("") }
+    var showGestureIndicator by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Auto-hide controls after 3.5 seconds
+    LaunchedEffect(controlsVisible, isPlaying) {
+        if (controlsVisible && isPlaying) {
+            delay(3500)
+            controlsVisible = false
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable { controlsVisible = !controlsVisible }
+    ) {
+        // Core Video View
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    player = viewModel.exoPlayer
+                    useController = false
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Tapping Gestures Overlay (Invisible double tap / skip controls)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onDoubleTap = { offset ->
+                            val player = viewModel.exoPlayer ?: return@detectTapGestures
+                            val isLeft = offset.x < size.width * 0.4f
+                            val seekAmount = if (isLeft) -10000 else 10000
+                            player.seekTo((player.currentPosition + seekAmount).coerceIn(0, player.duration))
+                            
+                            gestureIndicatorText = if (isLeft) "⏪ REWIND 10S" else "FORWARD 10S ⏩"
+                            coroutineScope.launch {
+                                showGestureIndicator = true
+                                delay(800)
+                                showGestureIndicator = false
+                            }
+                        },
+                        onTap = {
+                            controlsVisible = !controlsVisible
+                        }
+                    )
+                }
+        )
+
+        // Subtitles Overlay (Native looking customized overlay)
+        if (subtitlesActive) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = if (controlsVisible) 90.dp else 40.dp)
+                    .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "[Cinematic audio - " + formatTime(currentPosition) + "]",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+
+        // Gesture Action Feedback
+        AnimatedVisibility(
+            visible = showGestureIndicator,
+            enter = fadeIn() + scaleIn(),
+            exit = fadeOut() + scaleOut(),
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = TranslucentBlack),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text(
+                    text = gestureIndicatorText,
+                    color = PremiumGold,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+            }
+        }
+
+        // Animated HUD Controls Layer
+        AnimatedVisibility(
+            visible = controlsVisible,
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.6f),
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.7f)
+                            )
+                        )
+                    )
+            ) {
+                // Top controls bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter)
+                        .padding(horizontal = 24.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = onExitFullscreen,
+                            modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FullscreenExit,
+                                contentDescription = "Exit Fullscreen",
+                                tint = PremiumGold
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text(
+                                text = activeLesson.title,
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "FULLSCREEN DISCIPLINE HUD",
+                                color = PremiumGold,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+
+                // Middle Quick Play Pause Circle
+                IconButton(
+                    onClick = onPlayPauseToggle,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .background(PremiumGold, CircleShape)
+                        .size(60.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = "Toggle Play Progress",
+                        tint = Color.Black,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+
+                // Bottom Timeline and Sub controls
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 24.dp, vertical = 20.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = formatTime(currentPosition),
+                            color = SubduedGray,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Slider(
+                            value = if (totalDuration > 0) currentPosition.toFloat() / totalDuration.toFloat() else 0f,
+                            onValueChange = onSeek,
+                            colors = SliderDefaults.colors(
+                                activeTrackColor = PremiumGold,
+                                inactiveTrackColor = Color(0xFF333333),
+                                thumbColor = PremiumGold
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 12.dp)
+                        )
+                        Text(
+                            text = formatTime(totalDuration),
+                            color = SubduedGray,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            // play speed configuration cycle
+                            TextButton(
+                                onClick = {
+                                    val nextSpeed = when (playbackSpeed) {
+                                        1.0f -> 1.25f
+                                        1.25f -> 1.5f
+                                        1.5f -> 2.0f
+                                        else -> 1.0f
+                                    }
+                                    onSpeedChanged(nextSpeed)
+                                },
+                                modifier = Modifier
+                                    .background(Color(0xFF222222), RoundedCornerShape(6.dp))
+                                    .height(34.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp)
+                            ) {
+                                Text(
+                                    text = "${playbackSpeed}x Speed",
+                                    color = PremiumGold,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+
+                            // CC subtitling toggle
+                            IconButton(
+                                onClick = onSubtitleToggle,
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .background(if (subtitlesActive) Color(0xFF2F240E) else Color(0xFF222222), RoundedCornerShape(6.dp))
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ClosedCaption,
+                                    contentDescription = "Toggle Subtitles",
+                                    tint = if (subtitlesActive) PremiumGold else Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = onExitFullscreen,
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(Color(0xFF222222), CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FullscreenExit,
+                                contentDescription = "Exit Fullscreen",
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

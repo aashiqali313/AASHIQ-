@@ -306,6 +306,8 @@ class CourseRepository(private val database: AppDatabase) {
 
                         // Try finding notes of same name (.md or .txt)
                         val noteContent = findCorrespondingNoteText(resolver, modFiles, file.name)
+                        val subtitleUri = findCorrespondingSubtitleUri(modFiles, file.name)
+                        val pdfUri = findCorrespondingPdfUri(modFiles, file.name)
 
                         lessonsToInsert.add(
                             LessonEntity(
@@ -316,7 +318,9 @@ class CourseRepository(private val database: AppDatabase) {
                                 videoUri = file.uri.toString(),
                                 notePath = noteContent ?: "## $lessonTitle\nEnjoy this offline cinematic video lesson natively on AASHIQ+.",
                                 durationSeconds = 300L, // Placeholder, dynamically read where supported
-                                orderIndex = lessonIndex
+                                orderIndex = lessonIndex,
+                                subtitleUri = subtitleUri,
+                                pdfUri = pdfUri
                             )
                         )
                         lessonIndex++
@@ -331,6 +335,8 @@ class CourseRepository(private val database: AppDatabase) {
                     val lessonTitle = file.name?.substringBeforeLast(".") ?: "Lecture ${videoIndex + 1}"
                     val lessonId = "les_${defaultModuleId}_${videoIndex + 1}"
                     val noteContent = findCorrespondingNoteText(resolver, files, file.name)
+                    val subtitleUri = findCorrespondingSubtitleUri(files, file.name)
+                    val pdfUri = findCorrespondingPdfUri(files, file.name)
 
                     lessonsToInsert.add(
                         LessonEntity(
@@ -341,7 +347,9 @@ class CourseRepository(private val database: AppDatabase) {
                             videoUri = file.uri.toString(),
                             notePath = noteContent ?: "## $lessonTitle\nPremium offline lecture notes.",
                             durationSeconds = 300L,
-                            orderIndex = videoIndex + 1
+                            orderIndex = videoIndex + 1,
+                            subtitleUri = subtitleUri,
+                            pdfUri = pdfUri
                         )
                     )
                 }
@@ -384,12 +392,38 @@ class CourseRepository(private val database: AppDatabase) {
 
     private fun isVideoFile(filename: String): Boolean {
         val extension = filename.substringAfterLast(".").lowercase()
-        return extension in listOf("mp4", "mkv", "3gp", "webm", "avi", "mov")
+        return extension in listOf("mp4", "mkv", "3gp", "webm", "avi", "mov", "aashiq")
     }
 
     private fun isImageFile(filename: String): Boolean {
         val extension = filename.substringAfterLast(".").lowercase()
         return extension in listOf("png", "jpg", "jpeg", "webp")
+    }
+
+    private fun findCorrespondingSubtitleUri(files: Array<DocumentFile>, videoFileName: String?): String? {
+        if (videoFileName == null) return null
+        val baseName = videoFileName.substringBeforeLast(".")
+        val subFile = files.find {
+            val name = it.name ?: ""
+            name.substringBeforeLast(".") == baseName && 
+            (name.endsWith(".srt") || name.endsWith(".vtt"))
+        }
+        return subFile?.uri?.toString()
+    }
+
+    private fun findCorrespondingPdfUri(files: Array<DocumentFile>, videoFileName: String?): String? {
+        if (videoFileName == null) return null
+        val baseName = videoFileName.substringBeforeLast(".")
+        // Find PDF with same name first
+        var pdfFile = files.find {
+            val name = it.name ?: ""
+            name.substringBeforeLast(".") == baseName && name.endsWith(".pdf")
+        }
+        // Fallback: If no PDF with same name, find any PDF in the same folder
+        if (pdfFile == null) {
+            pdfFile = files.find { (it.name ?: "").endsWith(".pdf") }
+        }
+        return pdfFile?.uri?.toString()
     }
 
     private fun findCorrespondingNoteText(resolver: ContentResolver, files: Array<DocumentFile>, videoFileName: String?): String? {

@@ -2,10 +2,14 @@ package com.example.viewmodel
 
 import android.app.Application
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
 import com.example.data.database.*
 import com.example.repository.CourseRepository
@@ -103,6 +107,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         get() {
             if (_exoPlayer == null) {
                 _exoPlayer = ExoPlayer.Builder(getApplication())
+                    .setLooper(Looper.getMainLooper())
                     .setHandleAudioBecomingNoisy(true)
                     .build().apply {
                         repeatMode = Player.REPEAT_MODE_OFF
@@ -123,7 +128,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun playLessonVideo(lesson: LessonEntity) {
         val player = exoPlayer ?: return
         viewModelScope.launch(Dispatchers.Main) {
-            val mediaItem = MediaItem.fromUri(lesson.videoUri)
+            val mediaItemBuilder = MediaItem.Builder().setUri(lesson.videoUri)
+            
+            if (!lesson.subtitleUri.isNullOrEmpty()) {
+                try {
+                    val subUri = Uri.parse(lesson.subtitleUri)
+                    val mimeType = if (lesson.subtitleUri.endsWith(".vtt", ignoreCase = true)) {
+                        MimeTypes.TEXT_VTT
+                    } else {
+                        MimeTypes.APPLICATION_SUBRIP
+                    }
+                    val subtitleConfig = MediaItem.SubtitleConfiguration.Builder(subUri)
+                        .setMimeType(mimeType)
+                        .setLanguage("en")
+                        .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                        .build()
+                    mediaItemBuilder.setSubtitleConfigurations(listOf(subtitleConfig))
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+            
+            val mediaItem = mediaItemBuilder.build()
             player.setMediaItem(mediaItem)
             
             // Auto resume / Continue Watching check
@@ -270,8 +296,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         // Releasing ExoPlayer safely on ViewModel clear to prevent heavy memory leaks
         _exoPlayer?.let { player ->
-            player.stop()
-            player.release()
+            Handler(Looper.getMainLooper()).post {
+                try {
+                    player.stop()
+                    player.release()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
         }
         _exoPlayer = null
         super.onCleared()

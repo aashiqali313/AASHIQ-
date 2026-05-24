@@ -14,7 +14,7 @@ import androidx.room.RoomDatabase
         RecentSearchEntity::class,
         UserSettingsEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

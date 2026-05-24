@@ -43,8 +43,6 @@ fun SearchScreen(
     val searchResults by viewModel.searchResults.collectAsState()
     val recentSearches by viewModel.recentSearches.collectAsState()
 
-    var voiceActive by remember { mutableStateOf(false) }
-
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
@@ -53,8 +51,7 @@ fun SearchScreen(
                 query = query,
                 onQueryChange = { viewModel.searchQuery.value = it },
                 onSearchSubmit = { viewModel.searchTriggered(it) },
-                onBack = onNavigateBack,
-                onVoiceClick = { voiceActive = !voiceActive }
+                onBack = onNavigateBack
             )
         }
     ) { innerPadding ->
@@ -64,32 +61,6 @@ fun SearchScreen(
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Voice Search Placeholder Architecture Simulation
-            if (voiceActive) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF1E1705))
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = PremiumGold, strokeWidth = 2.dp)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "SPEAK NOW (VOICE SEARCH READY)",
-                            color = PremiumGold,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = "Listening for modules, lessons, or note keywords...", color = Color.White, fontSize = 10.sp)
-                    }
-                }
-            }
-
             // Recent Searches Row
             if (recentSearches.isNotEmpty() && query.isBlank()) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -203,8 +174,7 @@ fun SearchTopBar(
     query: String,
     onQueryChange: (String) -> Unit,
     onSearchSubmit: (String) -> Unit,
-    onBack: () -> Unit,
-    onVoiceClick: () -> Unit
+    onBack: () -> Unit
 ) {
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -266,11 +236,6 @@ fun SearchTopBar(
                         }
                     }
                 }
-            }
-
-            // Mic action button
-            IconButton(onClick = onVoiceClick) {
-                Icon(imageVector = Icons.Default.Mic, contentDescription = "Voice Search Ready", tint = PremiumGold)
             }
         }
     }

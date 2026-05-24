@@ -37,7 +37,9 @@ data class LessonEntity(
     val isBookmarked: Boolean = false,
     val lastWatchedTimestamp: Long = 0L,
     val playProgressPercent: Int = 0,
-    val progressMs: Long = 0L
+    val progressMs: Long = 0L,
+    val subtitleUri: String? = null,
+    val pdfUri: String? = null
 )
 
 @Entity(tableName = "playback_progress")
