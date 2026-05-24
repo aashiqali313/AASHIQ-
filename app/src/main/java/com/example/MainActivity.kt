@@ -12,6 +12,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import com.example.ui.screens.*
 import com.example.ui.theme.AashiqTheme
 import com.example.viewmodel.AppViewModel
@@ -35,7 +37,19 @@ class MainActivity : ComponentActivity() {
                 
                 NavHost(
                     navController = navController, 
-                    startDestination = "splash"
+                    startDestination = "splash",
+                    enterTransition = {
+                        slideInHorizontally(initialOffsetX = { 350 }, animationSpec = tween(220)) + fadeIn(animationSpec = tween(220))
+                    },
+                    exitTransition = {
+                        slideOutHorizontally(targetOffsetX = { -350 }, animationSpec = tween(220)) + fadeOut(animationSpec = tween(220))
+                    },
+                    popEnterTransition = {
+                        slideInHorizontally(initialOffsetX = { -350 }, animationSpec = tween(220)) + fadeIn(animationSpec = tween(220))
+                    },
+                    popExitTransition = {
+                        slideOutHorizontally(targetOffsetX = { 350 }, animationSpec = tween(220)) + fadeOut(animationSpec = tween(220))
+                    }
                 ) {
                     composable("splash") {
                         SplashScreen {

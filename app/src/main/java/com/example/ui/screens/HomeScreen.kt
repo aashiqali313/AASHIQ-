@@ -53,7 +53,6 @@ fun HomeScreen(
     val coroutineScope = rememberCoroutineScope()
     val courses by viewModel.coursesState.collectAsState()
     val continueWatching by viewModel.continueWatching.collectAsState()
-    val bookmarkedLessons by viewModel.bookmarkedLessons.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
     val importProgress by viewModel.importProgress.collectAsState()
     val importStatus by viewModel.importStatus.collectAsState()
@@ -186,38 +185,6 @@ fun HomeScreen(
                             course = course,
                             onCourseClick = { onNavigateToCourseDetail(it.id) }
                         )
-                    }
-                }
-
-                // Bookmarks collection preview
-                if (bookmarkedLessons.isNotEmpty()) {
-                    item {
-                        Text(
-                            text = "SAVED MOMENTS",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = PremiumGold,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 2.sp,
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp)
-                        )
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(90.dp)
-                        ) {
-                            items(bookmarkedLessons, key = { it.id }) { lesson ->
-                                BookmarkChipItem(
-                                    lesson = lesson,
-                                    onClick = {
-                                        viewModel.selectedCourseId.value = lesson.courseId
-                                        viewModel.selectedLessonId.value = lesson.id
-                                        onNavigateToPlayer(lesson.id)
-                                    }
-                                )
-                            }
-                        }
                     }
                 }
             }
@@ -503,8 +470,8 @@ fun CourseHeroCarousel(courses: List<CourseEntity>, onExploreCourse: (CourseEnti
 @Composable
 fun ContinueWatchingCard(lesson: LessonEntity, onPlayClick: () -> Unit) {
     Surface(
-        color = Color(0xFF141414),
-        border = BorderStroke(1.dp, Color(0xFF252525)),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .width(220.dp)
@@ -522,7 +489,7 @@ fun ContinueWatchingCard(lesson: LessonEntity, onPlayClick: () -> Unit) {
                     text = lesson.title,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -570,8 +537,8 @@ fun CourseRowItem(course: CourseEntity, onCourseClick: (CourseEntity) -> Unit) {
             .padding(horizontal = 16.dp, vertical = 6.dp)
             .clickable { onCourseClick(course) }
             .testTag("course_item_card_${course.id}"),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
-        border = BorderStroke(0.5.dp, Color(0xFF2A2A2A)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(
@@ -588,7 +555,7 @@ fun CourseRowItem(course: CourseEntity, onCourseClick: (CourseEntity) -> Unit) {
                 modifier = Modifier
                     .size(72.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .border(0.5.dp, Color(0xFF444444), RoundedCornerShape(8.dp))
+                    .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
             )
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -599,7 +566,7 @@ fun CourseRowItem(course: CourseEntity, onCourseClick: (CourseEntity) -> Unit) {
             ) {
                 Box(
                     modifier = Modifier
-                        .background(Color(0xFF221F14), RoundedCornerShape(4.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
@@ -617,7 +584,7 @@ fun CourseRowItem(course: CourseEntity, onCourseClick: (CourseEntity) -> Unit) {
                     text = course.title,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -644,70 +611,20 @@ fun CourseRowItem(course: CourseEntity, onCourseClick: (CourseEntity) -> Unit) {
 }
 
 @Composable
-fun BookmarkChipItem(lesson: LessonEntity, onClick: () -> Unit) {
-    Surface(
-        color = Color(0xFF161616),
-        border = BorderStroke(0.5.dp, Color(0xFF333333)),
-        shape = RoundedCornerShape(10.dp),
-        modifier = Modifier
-            .width(170.dp)
-            .height(70.dp)
-            .clickable { onClick() }
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .background(Color(0xFF261D0C), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Bookmark,
-                    contentDescription = null,
-                    tint = PremiumGold,
-                    modifier = Modifier.size(14.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(verticalArrangement = Arrangement.Center) {
-                Text(
-                    text = lesson.title,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "Launch saved play",
-                    fontSize = 10.sp,
-                    color = SubduedGray
-                )
-            }
-        }
-    }
-}
-
-@Composable
 fun EmptyCoursesPlaceholder(onImportClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(24.dp)
-            .background(Color(0xFF111111), RoundedCornerShape(16.dp))
-            .border(1.dp, Color(0xFF252525), RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
+            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(16.dp))
             .padding(vertical = 32.dp, horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
             modifier = Modifier
                 .size(60.dp)
-                .background(Color(0xFF1B1A12), CircleShape),
+                .background(PremiumGold.copy(alpha = 0.15f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -723,7 +640,7 @@ fun EmptyCoursesPlaceholder(onImportClick: () -> Unit) {
         Text(
             text = "Your Drive Library is Vacant",
             style = MaterialTheme.typography.titleMedium,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Bold
         )
 

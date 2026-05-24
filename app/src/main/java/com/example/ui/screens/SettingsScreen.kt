@@ -40,7 +40,7 @@ fun SettingsScreen(
         topBar = {
             Surface(
                 color = MaterialTheme.colorScheme.background,
-                border = BorderStroke(0.5.dp, Color(0xFF222222))
+                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
             ) {
                 Row(
                     modifier = Modifier
@@ -50,7 +50,7 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
@@ -84,7 +84,7 @@ fun SettingsScreen(
                     }
                 )
 
-                Divider(color = Color(0xFF222222), thickness = 0.5.dp)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), thickness = 0.5.dp)
 
                 // AMOLED true black card
                 SettingsToggleRow(
@@ -97,7 +97,7 @@ fun SettingsScreen(
                     }
                 )
 
-                Divider(color = Color(0xFF222222), thickness = 0.5.dp)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), thickness = 0.5.dp)
 
                 // Accent premium color gold
                 SettingsToggleRow(
@@ -121,7 +121,7 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Default Lesson Velocity", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(text = "Default Lesson Velocity", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         Text(text = "Applies automatically at lecture launch.", fontSize = 11.sp, color = SubduedGray)
                     }
                     
@@ -131,10 +131,10 @@ fun SettingsScreen(
                             Box(
                                 modifier = Modifier
                                     .background(
-                                        color = if (isSelected) PremiumGold else Color(0xFF141414),
+                                        color = if (isSelected) PremiumGold else MaterialTheme.colorScheme.background,
                                         shape = RoundedCornerShape(4.dp)
                                     )
-                                    .border(0.5.dp, if (isSelected) PremiumGold else Color(0xFF333333), RoundedCornerShape(4.dp))
+                                    .border(0.5.dp, if (isSelected) PremiumGold else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
                                     .clickable { viewModel.updateSettings(settings.copy(defaultSpeed = speed)) }
                                     .padding(horizontal = 10.dp, vertical = 6.dp)
                             ) {
@@ -142,7 +142,7 @@ fun SettingsScreen(
                                     text = "${speed}x",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) Color.Black else Color.White,
+                                    color = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurface,
                                     fontFamily = FontFamily.Monospace
                                 )
                             }
@@ -150,7 +150,7 @@ fun SettingsScreen(
                     }
                 }
 
-                Divider(color = Color(0xFF222222), thickness = 0.5.dp)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), thickness = 0.5.dp)
 
                 // Subtitle presets
                 SettingsToggleRow(
@@ -162,7 +162,7 @@ fun SettingsScreen(
                     }
                 )
 
-                Divider(color = Color(0xFF222222), thickness = 0.5.dp)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), thickness = 0.5.dp)
 
                 // Gesture swipe brightness/vol
                 SettingsToggleRow(
@@ -186,13 +186,13 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Purge Video Cache Entries", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(text = "Purge Video Cache Entries", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         Text(text = "Clears image render preloads and optimizes image memory allocations.", fontSize = 11.sp, color = SubduedGray)
                     }
 
                     Button(
                         onClick = { cacheClearedAlert = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1C1C1C), contentColor = Color.White),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), contentColor = PremiumGold),
                         shape = RoundedCornerShape(6.dp),
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
                         modifier = Modifier.height(32.dp)
@@ -201,7 +201,7 @@ fun SettingsScreen(
                     }
                 }
 
-                Divider(color = Color(0xFF222222), thickness = 0.5.dp)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), thickness = 0.5.dp)
 
                 // Reset database & reload curated courses
                 Row(
@@ -212,7 +212,7 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Re-populate Core Database", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(text = "Re-populate Core Database", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         Text(text = "Resets masterclass listings and restores premium starting libraries.", fontSize = 11.sp, color = SubduedGray)
                     }
 
@@ -237,8 +237,8 @@ fun SettingsScreen(
 
             // Stats Diagnostics panel
             Surface(
-                color = Color(0xFF0F0F0F),
-                border = BorderStroke(0.5.dp, Color(0xFF222222)),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
             ) {
@@ -302,8 +302,8 @@ fun SettingsGroupCard(title: String, content: @Composable ColumnScope.() -> Unit
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
         )
         Surface(
-            color = Color(0xFF121212),
-            border = BorderStroke(0.5.dp, Color(0xFF222222)),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -332,7 +332,7 @@ fun SettingsToggleRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(text = title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             Text(text = subtitle, fontSize = 11.sp, color = SubduedGray)
         }
         
@@ -342,9 +342,9 @@ fun SettingsToggleRow(
             enabled = enabled,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = PremiumGold,
-                checkedTrackColor = Color(0xFF2F240C),
+                checkedTrackColor = PremiumGold.copy(alpha = 0.3f),
                 uncheckedThumbColor = Color.Gray,
-                uncheckedTrackColor = Color(0xFF1E1E1E)
+                uncheckedTrackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
             )
         )
     }

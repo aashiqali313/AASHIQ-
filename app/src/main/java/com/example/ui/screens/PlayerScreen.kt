@@ -1,6 +1,9 @@
 package com.example.ui.screens
 
 import android.content.Context
+import android.content.ContextWrapper
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.media.AudioManager
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -78,6 +81,38 @@ fun PlayerScreen(
 
     // Fullscreen state
     var isFullscreen by remember { mutableStateOf(false) }
+
+    // Screen auto-rotation helper for fullscreen landscape video playback
+    val activity = remember(context) {
+        var c = context
+        while (c is ContextWrapper) {
+            if (c is Activity) break
+            c = c.baseContext
+        }
+        c as? Activity
+    }
+
+    DisposableEffect(isFullscreen) {
+        if (isFullscreen) {
+            val format = viewModel.exoPlayer?.videoFormat
+            val rotateToLandscape = if (format != null && format.width > 0 && format.height > 0) {
+                format.width > format.height
+            } else {
+                true // Default true if format not parsed or empty
+            }
+
+            if (rotateToLandscape) {
+                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            } else {
+                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
+        } else {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+        onDispose {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
 
     // Preload lesson media
     LaunchedEffect(lessonId) {
@@ -346,8 +381,6 @@ fun PlayerScreen(
                     viewModel.exoPlayer?.setPlaybackSpeed(it)
                 },
                 onSubtitleToggle = { subtitlesActive = !subtitlesActive },
-                onBookmarkToggle = { viewModel.toggleBookmark(activeLesson.id) },
-                isBookmarked = activeLesson.isBookmarked,
                 onFullscreenToggle = { isFullscreen = true }
             )
 
@@ -439,8 +472,6 @@ fun PlayerToolbarOverlay(
     onSeek: (Float) -> Unit,
     onSpeedChanged: (Float) -> Unit,
     onSubtitleToggle: () -> Unit,
-    onBookmarkToggle: () -> Unit,
-    isBookmarked: Boolean,
     onFullscreenToggle: () -> Unit
 ) {
     Surface(
@@ -564,21 +595,9 @@ fun PlayerToolbarOverlay(
                         modifier = Modifier.size(24.dp)
                     )
                 }
-
-                // Right action items (bookmark toggle)
-                IconButton(
-                    onClick = onBookmarkToggle,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .background(if (isBookmarked) Color(0xFF2F240E) else Color(0xFF1E1E1E), CircleShape)
-                ) {
-                    Icon(
-                        imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
-                        contentDescription = "Save Progress moment",
-                        tint = if (isBookmarked) PremiumGold else Color.White,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
+                
+                // Simple empty spacer on the right so the layout balanced exactly as before
+                Spacer(modifier = Modifier.size(32.dp))
             }
         }
     }

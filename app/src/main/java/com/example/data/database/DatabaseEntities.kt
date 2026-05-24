@@ -64,7 +64,7 @@ data class UserSettingsEntity(
     val amoledBlack: Boolean = true,
     val accentColorGold: Boolean = true,
     val defaultSpeed: Float = 1.0f,
-    val showSubtitles: Boolean = true,
+    val showSubtitles: Boolean = false,
     val volumeGestureEnabled: Boolean = true,
     val brightnessGestureEnabled: Boolean = true,
     val doubleTapSeekEnabled: Boolean = true,
