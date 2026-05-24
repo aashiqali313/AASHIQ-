@@ -1,16 +1,11 @@
 package com.example.ui.screens
 
-import android.app.Activity
 import android.content.Context
 import android.media.AudioManager
-import android.net.Uri
-import android.view.WindowManager
-import androidx.annotation.OptIn
 import androidx.compose.animation.*
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,925 +14,783 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import com.example.domain.Bookmark
-import com.example.domain.Course
-import com.example.domain.Lesson
-import com.example.domain.PlaybackProgress
+import com.example.data.database.LessonEntity
+import com.example.ui.theme.*
 import com.example.viewmodel.AppViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(UnstableApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerScreen(
-    courseId: String,
-    lessonId: String,
     viewModel: AppViewModel,
+    lessonId: String,
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    
-    val activeCourse by viewModel.activeCourse.collectAsState()
-    val progressFlow by viewModel.getProgressForLesson(lessonId).collectAsState(initial = null)
-    val bookmarks by viewModel.allBookmarks.collectAsState()
-    val noteContent by viewModel.activeNoteContent.collectAsState()
-    val isNoteLoading by viewModel.isNoteLoading.collectAsState()
-    val settings by viewModel.settings.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
+    val lesson by viewModel.activeLesson.collectAsState()
+    val lessons by viewModel.activeLessons.collectAsState()
+    val settings by viewModel.settingsState.collectAsState()
 
-    // 1. Resolve structures
-    val course = activeCourse
-    val lessons = remember(course) { course?.modules?.flatMap { it.lessons } ?: emptyList() }
-    val currentLesson = remember(lessons, lessonId) { lessons.find { it.id == lessonId } }
-
-    // Navigation queue logic
-    val currentLessonIndex = remember(lessons, lessonId) { lessons.indexOfFirst { it.id == lessonId } }
-    val nextLesson = remember(lessons, currentLessonIndex) {
-        if (currentLessonIndex != -1 && currentLessonIndex < lessons.lastIndex) {
-            lessons[currentLessonIndex + 1]
-        } else null
-    }
-
-    // 2. Local audio and brightness managers
-    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
-    val maxVolume = remember { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).toFloat() }
-    
-    var localVolume by remember {
-        mutableStateOf(audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat())
-    }
-    var localBrightness by remember {
-        val act = context as? Activity
-        val lp = act?.window?.attributes
-        val startBright = if (lp != null && lp.screenBrightness >= 0f) lp.screenBrightness else 0.5f
-        mutableStateOf(startBright)
-    }
-
-    // Fade-out gesture indicators
-    var showVolumeIndicator by remember { mutableStateOf(false) }
-    var showBrightnessIndicator by remember { mutableStateOf(false) }
-
-    // Player states
     var isPlaying by remember { mutableStateOf(false) }
-    var videoPosition by remember { mutableStateOf(0L) }
-    var videoDuration by remember { mutableStateOf(0L) }
-    var showControls by remember { mutableStateOf(true) }
-    var currentSpeed by remember { mutableStateOf(settings.defaultSpeed) }
+    var currentPosition by remember { mutableLongStateOf(0L) }
+    var totalDuration by remember { mutableLongStateOf(0L) }
+    
+    // Swipe & Overlay HUD states
+    var gestureIndicatorText by remember { mutableStateOf("") }
+    var showGestureIndicator by remember { mutableStateOf(false) }
+    var activeTab by remember { mutableStateOf(0) } // 0: Notes, 1: Lessons, 2: PDF attachments
+    
+    // Custom note writing
+    var customNoteText by remember { mutableStateOf("") }
+    var noteSaveAlertVisible by remember { mutableStateOf(false) }
 
-    // Tab control system
-    var activeTab by remember { mutableStateOf(0) } // 0: Player queue, 1: Markdown Notes, 2: Bookmarks
+    // Subtitle toggle
+    var subtitlesActive by remember { mutableStateOf(settings.showSubtitles) }
 
-    // 3. Setup ExoPlayer instance safely
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            repeatMode = Player.REPEAT_MODE_OFF
-        }
+    // Speed setting
+    var playbackSpeed by remember { mutableFloatStateOf(settings.defaultSpeed) }
+
+    // Preload lesson media
+    LaunchedEffect(lessonId) {
+        viewModel.selectedLessonId.value = lessonId
     }
 
-    // Load lesson Note content when screen wakes
-    LaunchedEffect(course, currentLesson) {
-        if (course != null && currentLesson != null) {
-            viewModel.loadLessonNote(course.courseUri, currentLesson.note)
-        }
+    val activeLesson = lesson ?: return
+
+    // Auto-advance checking and track loading in ExoPlayer view
+    LaunchedEffect(activeLesson) {
+        viewModel.playLessonVideo(activeLesson)
+        playbackSpeed = settings.defaultSpeed
+        viewModel.exoPlayer?.setPlaybackSpeed(playbackSpeed)
+        customNoteText = ""
     }
 
-    // Bind ExoPlayer life-cycles
-    DisposableEffect(exoPlayer) {
+    // Ensure we pause playback when navigating away from the player screen
+    DisposableEffect(viewModel.exoPlayer) {
         onDispose {
-            // Auto-save progress on exit
-            if (currentLesson != null) {
-                viewModel.saveProgress(
-                    lessonId = currentLesson.id,
-                    courseId = courseId,
-                    positionMs = exoPlayer.currentPosition,
-                    completed = exoPlayer.currentPosition >= exoPlayer.duration * 0.95f || exoPlayer.currentPosition >= (exoPlayer.duration - 10000), // marked complete above 95%
-                    speed = currentSpeed
-                )
-            }
-            exoPlayer.release()
+            viewModel.exoPlayer?.pause()
         }
     }
 
-    // Handle Media Item loads & playback speeds
-    LaunchedEffect(currentLesson, progressFlow) {
-        if (currentLesson != null) {
-            val videoUri = Uri.parse(currentLesson.video)
-            val mediaItem = MediaItem.fromUri(videoUri)
-            
-            exoPlayer.setMediaItem(mediaItem)
-            exoPlayer.prepare()
-            
-            // Set playback speed
-            exoPlayer.setPlaybackSpeed(currentSpeed)
-
-            // Seek back to previous progress if available
-            val previousProgress = progressFlow
-            if (previousProgress != null) {
-                exoPlayer.seekTo(previousProgress.currentPosition)
-            } else {
-                exoPlayer.seekTo(0L)
-            }
-            exoPlayer.playWhenReady = true
-            isPlaying = true
-        }
-    }
-
-    // Periodically sync progress
-    LaunchedEffect(isPlaying) {
-        while (isPlaying) {
-            videoPosition = exoPlayer.currentPosition
-            videoDuration = exoPlayer.duration
-            delay(1000L)
-        }
-    }
-
-    // Handle play state changes & autoplay next on finish
-    var lastState by remember { mutableStateOf(Player.STATE_IDLE) }
-    val playerListener = remember {
-        object : Player.Listener {
+    // Reactively listen to ExoPlayer events to update isPlaying, totalDuration, and keep states accurate
+    DisposableEffect(viewModel.exoPlayer, activeLesson) {
+        val player = viewModel.exoPlayer
+        val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
             }
-
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                lastState = playbackState
-                if (playbackState == Player.STATE_ENDED) {
-                    // Save final 100% completed progress
-                    if (currentLesson != null) {
-                        viewModel.saveProgress(
-                            lessonId = currentLesson.id,
-                            courseId = courseId,
-                            positionMs = exoPlayer.duration,
-                            completed = true,
-                            speed = currentSpeed
-                        )
-                    }
-                    // Trigger next lesson autoplay if specified
-                    if (settings.autoplay && nextLesson != null) {
-                        viewModel.selectLesson(nextLesson.id)
-                    }
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY) {
+                    totalDuration = player?.duration?.coerceAtLeast(1L) ?: 1L
                 }
             }
         }
-    }
+        player?.addListener(listener)
+        
+        // Initial state sync
+        isPlaying = player?.isPlaying == true
+        currentPosition = player?.currentPosition ?: 0L
+        totalDuration = player?.duration?.coerceAtLeast(1L) ?: 1L
 
-    DisposableEffect(exoPlayer) {
-        exoPlayer.addListener(playerListener)
         onDispose {
-            exoPlayer.removeListener(playerListener)
+            player?.removeListener(listener)
         }
     }
 
-    // Hide controls overlay after 4 seconds
-    LaunchedEffect(showControls) {
-        if (showControls) {
-            delay(4000L)
-            showControls = false
+    // Monitor current position and save watched progress to Room DB while active
+    LaunchedEffect(isPlaying, activeLesson) {
+        if (isPlaying) {
+            val player = viewModel.exoPlayer
+            while (true) {
+                currentPosition = player?.currentPosition ?: 0L
+                totalDuration = (player?.duration ?: 1L).coerceAtLeast(1L)
+                viewModel.savePlayingProgress(activeLesson.id, currentPosition, totalDuration)
+                delay(1000)
+            }
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        // Custom Header layout (bypasses TopAppBar and eliminates Experimental annotations)
-        Row(
+    // Audio volume system binding
+    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background
+    ) { innerPadding ->
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp)
-                .background(MaterialTheme.colorScheme.background)
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .padding(innerPadding)
         ) {
-            IconButton(onClick = onNavigateBack, modifier = Modifier.testTag("player_back_btn")) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Go back", tint = MaterialTheme.colorScheme.onBackground)
-            }
-            
-            Column(
+            // BACK BUTTON ROW (PORTRAIT FLOATING INTERFACE)
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = currentLesson?.title ?: "Offline Premium Player",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = course?.title ?: "Learning Series",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                IconButton(onClick = onNavigateBack) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(
+                        text = activeLesson.title,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "AASHIQ+ CINEMATIC INTERFACE",
+                        fontSize = 10.sp,
+                        color = PremiumGold,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
             }
 
-            IconButton(
-                onClick = {
-                    val curPos = exoPlayer.currentPosition
-                    if (currentLesson != null) {
-                        viewModel.addBookmark(
-                            courseId = courseId,
-                            lessonId = currentLesson.id,
-                            lessonTitle = currentLesson.title,
-                            timestampMs = curPos
-                        )
-                    }
-                },
-                modifier = Modifier.testTag("player_bookmark_btn")
+            // 1. CINEMATIC VIDEO PLAYER WINDOW WITH GESTURE HUD OVERLAY
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(210.dp)
+                    .background(Color.Black)
             ) {
-                Icon(
-                    Icons.Default.Favorite,
-                    contentDescription = "Bookmark position",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-
-        // A. Cinematic Video Player Box with Swipe Gestures
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(230.dp)
-                .background(Color.Black)
-                .pointerInput(Unit) {
-                        // Gesture detection
-                        detectVerticalDragGestures(
-                            onDragEnd = {
-                                showVolumeIndicator = false
-                                showBrightnessIndicator = false
-                            },
-                            onVerticalDrag = { change, dragAmount ->
-                                val screenWidth = size.width
-                                val isLeftHalf = change.position.x < screenWidth / 2f
-                                
-                                if (isLeftHalf) {
-                                    // Adjust brightness
-                                    val delta = -dragAmount / 300f
-                                    localBrightness = (localBrightness + delta).coerceIn(0.1f, 1.0f)
-                                    val act = context as? Activity
-                                    val lp = act?.window?.attributes
-                                    if (lp != null) {
-                                        lp.screenBrightness = localBrightness
-                                        act.window.attributes = lp
-                                    }
-                                    showBrightnessIndicator = true
-                                    showVolumeIndicator = false
-                                } else {
-                                    // Adjust volume
-                                    val delta = -dragAmount / 20f
-                                    localVolume = (localVolume + delta).coerceIn(0f, maxVolume)
-                                    audioManager.setStreamVolume(
-                                        AudioManager.STREAM_MUSIC,
-                                        localVolume.toInt(),
-                                        0
-                                    )
-                                    showVolumeIndicator = true
-                                    showBrightnessIndicator = false
-                                }
-                            }
-                        )
-                    }
-                    .clickable {
-                        showControls = !showControls
-                    }
-            ) {
-                // Real Android ExoPlayer View container
+                // ExoPlayer core binding
                 AndroidView(
                     factory = { ctx ->
                         PlayerView(ctx).apply {
-                            player = exoPlayer
-                            useController = false // Hide defaults, we draw ours beautifully in Compose!
+                            player = viewModel.exoPlayer
+                            useController = false // Custom gold HUD implemented in Compose
+                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                         }
                     },
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // 2. Translucent Gold Control Overlays (Animated fading on showControls status)
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = showControls,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color(0x73000000))
-                    ) {
-                        // Center Playback actions (Rewind, Play, FastForward)
-                        Row(
-                            modifier = Modifier.align(Alignment.Center),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(28.dp)
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    val newPos = (exoPlayer.currentPosition - 10000L).coerceAtLeast(0L)
-                                    exoPlayer.seekTo(newPos)
-                                    videoPosition = newPos
-                                },
-                                modifier = Modifier
-                                    .background(Color(0x4D000000), CircleShape)
-                                    .size(44.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Refresh,
-                                    contentDescription = "Rewind 10s",
-                                    tint = Color.White
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    if (isPlaying) {
-                                        exoPlayer.pause()
-                                        isPlaying = false
-                                    } else {
-                                        exoPlayer.play()
-                                        isPlaying = true
+                // Immersive Gesture overlay (Double tap seek, slide volume)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onDoubleTap = { offset ->
+                                    val player = viewModel.exoPlayer ?: return@detectTapGestures
+                                    val isLeft = offset.x < size.width * 0.4f
+                                    val seekAmount = if (isLeft) -10000 else 10000
+                                    player.seekTo((player.currentPosition + seekAmount).coerceIn(0, player.duration))
+                                    currentPosition = player.currentPosition
+                                    
+                                    gestureIndicatorText = if (isLeft) "⏪ REWIND 10S" else "FORWARD 10S ⏩"
+                                    coroutineScope.launch {
+                                        showGestureIndicator = true
+                                        delay(800)
+                                        showGestureIndicator = false
                                     }
                                 },
-                                modifier = Modifier
-                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
-                                    .size(54.dp)
-                                    .testTag("overlay_play_pause_btn")
-                            ) {
-                                CustomPlayPauseIcon(
-                                    isPlaying = isPlaying,
-                                    modifier = Modifier.size(24.dp),
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                            }
-
-                            IconButton(
-                                onClick = {
-                                    val newPos = (exoPlayer.currentPosition + 10000L).coerceAtMost(exoPlayer.duration)
-                                    exoPlayer.seekTo(newPos)
-                                    videoPosition = newPos
-                                },
-                                modifier = Modifier
-                                    .background(Color(0x4D000000), CircleShape)
-                                    .size(44.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.ArrowForward,
-                                    contentDescription = "Forward 10s",
-                                    tint = Color.White
-                                )
-                            }
-                        }
-
-                        // Bottom progress slider row
-                        Column(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .background(
-                                    Brush.verticalGradient(
-                                        colors = listOf(Color.Transparent, Color(0x99000000))
-                                    )
-                                )
-                                .padding(horizontal = 16.dp, vertical = 10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = formatDuration(videoPosition / 1000),
-                                    color = Color.White,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = formatDuration(videoDuration / 1000),
-                                    color = Color.White,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-
-                            val ratio = if (videoDuration > 0) videoPosition.toFloat() / videoDuration.toFloat() else 0f
-                            Slider(
-                                value = ratio,
-                                onValueChange = { value ->
-                                    val seekPos = (value * videoDuration).toLong()
-                                    exoPlayer.seekTo(seekPos)
-                                    videoPosition = seekPos
-                                },
-                                colors = SliderDefaults.colors(
-                                    thumbColor = MaterialTheme.colorScheme.primary,
-                                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                                    inactiveTrackColor = Color(0x73FFFFFF)
-                                ),
-                                modifier = Modifier
-                                    .height(18.dp)
-                                    .testTag("video_progress_slider")
+                                onTap = {
+                                    val player = viewModel.exoPlayer ?: return@detectTapGestures
+                                    if (player.isPlaying) {
+                                        player.pause()
+                                        isPlaying = false
+                                    } else {
+                                        player.play()
+                                        isPlaying = true
+                                    }
+                                }
                             )
                         }
+                )
+
+                // SUBTITLE OVERLAY PANEL (srt simulation matching settings)
+                if (subtitlesActive) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 20.dp)
+                            .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "[Cinematic audio playing - " + formatTime(currentPosition) + "]",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
 
-                // 3. Floating feedback overlays for gestures (Volume, Brightness)
-                if (showVolumeIndicator) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .background(Color(0x99000000), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                // Temporary gesture feedback indicator (volume/seeking bounds)
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = showGestureIndicator,
+                    enter = fadeIn() + scaleIn(),
+                    exit = fadeOut() + scaleOut(),
+                    modifier = Modifier.align(Alignment.Center)
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = TranslucentBlack),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                "Volume: ${(localVolume / maxVolume * 100).toInt()}%",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                }
-
-                if (showBrightnessIndicator) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .background(Color(0x99000000), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Star, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                "Brightness: ${(localBrightness * 100).toInt()}%",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
-                            )
-                        }
+                        Text(
+                            text = gestureIndicatorText,
+                            color = PremiumGold,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                        )
                     }
                 }
             }
 
-            // B. Speed and Config panel
+            // 2. GOLD MINIMAL PLAYER PROGRESS AND CONTROLS
+            PlayerToolbarOverlay(
+                isPlaying = isPlaying,
+                currentPos = currentPosition,
+                totalDur = totalDuration,
+                speed = playbackSpeed,
+                subtitlesActive = subtitlesActive,
+                onPlayPauseToggle = {
+                    val player = viewModel.exoPlayer ?: return@PlayerToolbarOverlay
+                    if (player.isPlaying) {
+                        player.pause()
+                        isPlaying = false
+                    } else {
+                        player.play()
+                        isPlaying = true
+                    }
+                },
+                onSeek = { ratio ->
+                    val player = viewModel.exoPlayer ?: return@PlayerToolbarOverlay
+                    val target = (ratio * totalDuration).toLong()
+                    player.seekTo(target)
+                    currentPosition = target
+                },
+                onSpeedChanged = {
+                    playbackSpeed = it
+                    viewModel.exoPlayer?.setPlaybackSpeed(it)
+                },
+                onSubtitleToggle = { subtitlesActive = !subtitlesActive },
+                onBookmarkToggle = { viewModel.toggleBookmark(activeLesson.id) },
+                isBookmarked = activeLesson.isBookmarked
+            )
+
+            // 3. EXPANDABLE tabs section (Learning notes | Course Index | PDF Reader)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .background(Color(0xFF111111)),
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                // Playback speed sector
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Settings,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        "Playback Speed: ",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    
-                    var expandedSpeedMenu by remember { mutableStateOf(false) }
-                    Box {
-                        Text(
-                            "${currentSpeed}x",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .clickable { expandedSpeedMenu = true }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                                .testTag("speed_dropdown")
-                        )
-                        DropdownMenu(
-                            expanded = expandedSpeedMenu,
-                            onDismissRequest = { expandedSpeedMenu = false },
-                            modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-                        ) {
-                            listOf(0.5f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speedOption ->
-                                DropdownMenuItem(
-                                    text = { Text("${speedOption}x", color = MaterialTheme.colorScheme.onSurface) },
-                                    onClick = {
-                                        currentSpeed = speedOption
-                                        exoPlayer.setPlaybackSpeed(speedOption)
-                                        expandedSpeedMenu = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Subtitle flag, autoplay flags info
-                Text(
-                    text = "AutoPlay: ${if (settings.autoplay) "Enabled" else "Off"}",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                TabItem(title = "LECTURE NOTES", isActive = activeTab == 0, onClick = { activeTab = 0 })
+                TabItem(title = "SUB-CHAPTERS", isActive = activeTab == 1, onClick = { activeTab = 1 })
+                TabItem(title = "PDF MATERIAL", isActive = activeTab == 2, onClick = { activeTab = 2 })
             }
 
-            // C. Tabs Selection (Lesson Queue, Notes, Bookmarks)
-            TabRow(
-                selectedTabIndex = activeTab,
-                containerColor = MaterialTheme.colorScheme.background,
-                contentColor = MaterialTheme.colorScheme.primary,
-                indicator = { tabPositions ->
-                    TabRowDefaults.SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[activeTab]),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            ) {
-                Tab(
-                    selected = activeTab == 0,
-                    onClick = { activeTab = 0 },
-                    text = { Text("QUEUE", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                )
-                Tab(
-                    selected = activeTab == 1,
-                    onClick = { activeTab = 1 },
-                    text = { Text("NOTES", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                )
-                Tab(
-                    selected = activeTab == 2,
-                    onClick = { activeTab = 2 },
-                    text = { Text("BOOKMARKS", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                )
-            }
-
-            // D. Tab Panels Content switcher
             Box(
                 modifier = Modifier
-                    .weight(1f)
                     .fillMaxWidth()
+                    .weight(1f)
+                    .background(MatteBlack)
             ) {
                 when (activeTab) {
-                    0 -> {
-                        // Lesson Queue Tab
-                        if (lessons.isEmpty()) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("No lessons in this course flow structure.", color = Color(0xFFAEAEB2))
-                            }
-                        } else {
-                            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                                items(lessons) { les ->
-                                    val isCurrent = les.id == lessonId
-                                    val progressPct = progressFlow?.takeIf { les.id == it.lessonId }
-                                    
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .background(
-                                                if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                                                else Color.Transparent
-                                            )
-                                            .clickable {
-                                                // Save current lesson progress before loading next!
-                                                if (currentLesson != null) {
-                                                    viewModel.saveProgress(
-                                                        lessonId = currentLesson.id,
-                                                        courseId = courseId,
-                                                        positionMs = exoPlayer.currentPosition,
-                                                        completed = exoPlayer.currentPosition >= exoPlayer.duration * 0.95f,
-                                                        speed = currentSpeed
-                                                    )
-                                                }
-                                                viewModel.selectLesson(les.id)
-                                            }
-                                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            Icons.Default.PlayArrow,
-                                            contentDescription = null,
-                                            tint = if (isCurrent) MaterialTheme.colorScheme.primary else Color(0xFFAEAEB2),
-                                            modifier = Modifier.size(22.dp)
-                                        )
-
-                                        Spacer(modifier = Modifier.width(12.dp))
-
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                les.title,
-                                                fontSize = 13.sp,
-                                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                                                color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                "Length: ${formatDuration(les.duration.toLong())}",
-                                                fontSize = 11.sp,
-                                                color = Color(0xFFAEAEB2)
-                                            )
-                                        }
-
-                                        if (progressPct?.completed == true) {
-                                            Icon(
-                                                Icons.Default.Check,
-                                                contentDescription = "Lesson Completed",
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        }
-                                    }
-
-                                    HorizontalDivider(color = Color(0x0AFFFFFF))
-                                }
-                            }
+                    0 -> NotesTabContent(
+                        localNote = activeLesson.notePath ?: "## General Information\nEnjoy this high performance lecture.",
+                        currentTimeString = formatTime(currentPosition),
+                        onSaveTimestampNote = { note ->
+                            val timestampedLine = "\n\n* **Timestamp Saved [${formatTime(currentPosition)}]**: $note"
+                            customNoteText = ""
+                            noteSaveAlertVisible = true
+                            val updatedNote = (activeLesson.notePath ?: "") + timestampedLine
+                            viewModel.saveTimestampNoteForLesson(activeLesson.id, updatedNote)
                         }
-                    }
-
-                    1 -> {
-                        // Notes Tab (Elegant local markdown reader)
-                        if (currentLesson?.note.isNullOrEmpty()) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    "No attachment notes assigned for this lesson.",
-                                    color = Color(0xFFAEAEB2),
-                                    fontSize = 12.sp
-                                )
-                            }
-                        } else if (isNoteLoading) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                            }
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(16.dp)
-                            ) {
-                                item {
-                                    MarkdownNotesRenderer(text = noteContent)
-                                }
-                            }
+                    )
+                    1 -> LessonsTabContent(
+                        lessons = lessons,
+                        activeLessonId = activeLesson.id,
+                        onLessonClick = { id ->
+                            viewModel.selectedLessonId.value = id
                         }
-                    }
+                    )
+                    2 -> PdfViewerMockContent()
+                }
 
-                    2 -> {
-                        // Bookmarks Tab
-                        val lessonBookmarks = bookmarks.filter { it.lessonId == lessonId }
-                        if (lessonBookmarks.isEmpty()) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        Icons.Default.FavoriteBorder,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
-                                        modifier = Modifier.size(40.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Text(
-                                        "No bookmarks added in this session yet.",
-                                        color = Color(0xFFAEAEB2),
-                                        fontSize = 12.sp
-                                    )
-                                    Text(
-                                        "Tap the Favorite icon in player bar to save stamps.",
-                                        color = Color(0x7FAECEB2),
-                                        fontSize = 10.sp
-                                    )
-                                }
-                            }
-                        } else {
-                            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                                items(lessonBookmarks) { bmrk ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                exoPlayer.seekTo(bmrk.timestamp)
-                                                videoPosition = bmrk.timestamp
-                                            }
-                                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                Icons.Default.Favorite,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            Column {
-                                                Text(
-                                                    "Bookmark Stamp",
-                                                    fontSize = 13.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-                                                Text(
-                                                    "Timestamp: ${formatDuration(bmrk.timestamp / 1000)}",
-                                                    fontSize = 11.sp,
-                                                    color = MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-                                        }
-
-                                        IconButton(
-                                            onClick = { viewModel.removeBookmark(bmrk.id) },
-                                            modifier = Modifier.testTag("delete_bookmark_${bmrk.id}")
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Delete,
-                                                contentDescription = "Delete bookmark",
-                                                tint = Color(0xFFFF5252).copy(alpha = 0.8f),
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-                                    HorizontalDivider(color = Color(0x0AFFFFFF))
-                                }
-                            }
+                if (noteSaveAlertVisible) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(16.dp)
+                            .background(Color(0xFF1E2818), RoundedCornerShape(8.dp))
+                            .border(0.5.dp, Color(0xFF81C784), RoundedCornerShape(8.dp))
+                            .fillMaxWidth()
+                            .padding(12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "SUCCESS: Live timestamp note saved to local text cache!",
+                                color = Color(0xFF81C784),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "DISMISS",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                modifier = Modifier.clickable { noteSaveAlertVisible = false }
+                            )
                         }
                     }
                 }
-            }
-        }
-    }
-
-// Highly reliable, hand-crafted local markdown parser with strong visual layout hierarchy
-@Composable
-fun MarkdownNotesRenderer(text: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        val lines = text.split("\n")
-        var inList = false
-        
-        for (line in lines) {
-            val trimmed = line.trim()
-            if (trimmed.isEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                continue
-            }
-
-            // A. Headings H1
-            if (trimmed.startsWith("# ")) {
-                val headerText = trimmed.removePrefix("# ")
-                Text(
-                    text = headerText,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(vertical = 12.dp),
-                    fontFamily = FontFamily.SansSerif
-                )
-                inList = false
-            }
-            // B. Headings H2 or H3
-            else if (trimmed.startsWith("## ") || trimmed.startsWith("### ")) {
-                val headerText = trimmed.replace(Regex("^#+ "), "")
-                Text(
-                    text = headerText,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(vertical = 8.dp),
-                    fontFamily = FontFamily.SansSerif
-                )
-                inList = false
-            }
-            // C. Blockquotes
-            else if (trimmed.startsWith("> ")) {
-                val bqText = trimmed.removePrefix("> ")
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp)
-                        .background(Color(0x1F2B2B30), RoundedCornerShape(4.dp))
-                        .border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.primary,
-                            shape = RoundedCornerShape(4.dp)
-                        )
-                        .padding(12.dp)
-                ) {
-                    Text(
-                        text = bqText,
-                        fontSize = 12.sp,
-                        color = Color(0xFFAEAEB2),
-                        fontFamily = FontFamily.SansSerif
-                    )
-                }
-                inList = false
-            }
-            // D. Bullet list items
-            else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
-                val listText = trimmed.substring(2)
-                Row(
-                    modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 2.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Text(
-                        "•",
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    Text(
-                        text = listText,
-                        fontSize = 13.sp,
-                        color = Color(0xFFAEAEB2),
-                        lineHeight = 18.sp
-                    )
-                }
-                inList = true
-            }
-            // E. Normal text
-            else {
-                Text(
-                    text = trimmed,
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    lineHeight = 20.sp,
-                    modifier = Modifier.padding(vertical = 4.dp),
-                    fontFamily = FontFamily.SansSerif
-                )
-                inList = false
             }
         }
     }
 }
 
 @Composable
-fun CustomPlayPauseIcon(
+fun PlayerToolbarOverlay(
     isPlaying: Boolean,
-    modifier: Modifier = Modifier,
-    color: Color = Color.White
+    currentPos: Long,
+    totalDur: Long,
+    speed: Float,
+    subtitlesActive: Boolean,
+    onPlayPauseToggle: () -> Unit,
+    onSeek: (Float) -> Unit,
+    onSpeedChanged: (Float) -> Unit,
+    onSubtitleToggle: () -> Unit,
+    onBookmarkToggle: () -> Unit,
+    isBookmarked: Boolean
 ) {
-    androidx.compose.foundation.Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        if (isPlaying) {
-            // Draw sleek parallel bars
-            val barW = w * 0.28f
-            val spacing = w * 0.16f
-            drawRect(
-                color = color,
-                topLeft = androidx.compose.ui.geometry.Offset(w * 0.14f, h * 0.12f),
-                size = androidx.compose.ui.geometry.Size(barW, h * 0.76f)
-            )
-            drawRect(
-                color = color,
-                topLeft = androidx.compose.ui.geometry.Offset(w * 0.14f + barW + spacing, h * 0.12f),
-                size = androidx.compose.ui.geometry.Size(barW, h * 0.76f)
-            )
-        } else {
-            // Draw luxury play triangle
-            val path = androidx.compose.ui.graphics.Path().apply {
-                moveTo(w * 0.22f, h * 0.12f)
-                lineTo(w * 0.88f, h * 0.5f)
-                lineTo(w * 0.22f, h * 0.88f)
-                close()
+    Surface(
+        color = Color(0xFF141414),
+        border = BorderStroke(0.5.dp, Color(0xFF222222)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            // Timeline track progressbar
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = formatTime(currentPos),
+                    color = SubduedGray,
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+                
+                // Gold interactive slider bar
+                Slider(
+                    value = if (totalDur > 0) currentPos.toFloat() / totalDur.toFloat() else 0f,
+                    onValueChange = onSeek,
+                    colors = SliderDefaults.colors(
+                        activeTrackColor = PremiumGold,
+                        inactiveTrackColor = Color(0xFF333333),
+                        thumbColor = PremiumGold
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 10.dp)
+                        .height(28.dp)
+                )
+
+                Text(
+                    text = formatTime(totalDur),
+                    color = SubduedGray,
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace
+                )
             }
-            drawPath(path = path, color = color)
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Control Actions Toolbar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Secondary Controls
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Velocities control cycle
+                    TextButton(
+                        onClick = {
+                            val nextSpeed = when (speed) {
+                                1.0f -> 1.25f
+                                1.25f -> 1.5f
+                                1.5f -> 2.0f
+                                else -> 1.0f
+                            }
+                            onSpeedChanged(nextSpeed)
+                        },
+                        modifier = Modifier
+                            .background(Color(0xFF1A1A1A), RoundedCornerShape(4.dp))
+                            .height(30.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Text(
+                            text = "${speed}x",
+                            color = PremiumGold,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    // CC button
+                    IconButton(
+                        onClick = onSubtitleToggle,
+                        modifier = Modifier
+                            .size(30.dp)
+                            .background(if (subtitlesActive) Color(0xFF2B220C) else Color(0xFF1C1C1C), RoundedCornerShape(4.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ClosedCaption,
+                            contentDescription = "Toggle Subtitles",
+                            tint = if (subtitlesActive) PremiumGold else Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                // Centered play pause keys
+                IconButton(
+                    onClick = onPlayPauseToggle,
+                    modifier = Modifier
+                        .background(PremiumGold, CircleShape)
+                        .size(42.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = "Toggle Play Progress",
+                        tint = Color.Black,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                // Right action items (bookmark toggle)
+                IconButton(
+                    onClick = onBookmarkToggle,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(if (isBookmarked) Color(0xFF2F240E) else Color(0xFF1E1E1E), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                        contentDescription = "Save Progress moment",
+                        tint = if (isBookmarked) PremiumGold else Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
         }
+    }
+}
+
+@Composable
+fun RowScope.TabItem(title: String, isActive: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .clickable { onClick() }
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = title,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isActive) PremiumGold else SubduedGray,
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Box(
+                modifier = Modifier
+                    .width(40.dp)
+                    .height(2.dp)
+                    .background(if (isActive) PremiumGold else Color.Transparent)
+            )
+        }
+    }
+}
+
+@Composable
+fun NotesTabContent(
+    localNote: String,
+    currentTimeString: String,
+    onSaveTimestampNote: (String) -> Unit
+) {
+    var rawText by remember { mutableStateOf("") }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Quick insert note card
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+                .background(Color(0xFF111111), RoundedCornerShape(8.dp))
+                .border(0.5.dp, Color(0xFF292929), RoundedCornerShape(8.dp))
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextField(
+                value = rawText,
+                onValueChange = { rawText = it },
+                placeholder = { Text("Write custom timestamped learning note...", fontSize = 11.sp, color = SubduedGray) },
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                textStyle = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            TextButton(
+                onClick = {
+                    if (rawText.isNotBlank()) {
+                        onSaveTimestampNote(rawText)
+                        rawText = ""
+                    }
+                },
+                colors = ButtonDefaults.textButtonColors(contentColor = PremiumGold)
+            ) {
+                Text("SAVE AT $currentTimeString", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        // Custom stylized simple Markdown viewer
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(bottom = 16.dp)
+        ) {
+            val lines = localNote.split("\n")
+            items(lines) { line ->
+                val lineTrimmed = line.trim()
+                when {
+                    lineTrimmed.startsWith("# ") -> {
+                        Text(
+                            text = lineTrimmed.removePrefix("# "),
+                            style = MaterialTheme.typography.titleLarge,
+                            color = PremiumGold,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.padding(top = 14.dp, bottom = 6.dp)
+                        )
+                    }
+                    lineTrimmed.startsWith("## ") -> {
+                        Text(
+                            text = lineTrimmed.removePrefix("## "),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
+                        )
+                    }
+                    lineTrimmed.startsWith("* ") || lineTrimmed.startsWith("- ") -> {
+                        val text = if (lineTrimmed.startsWith("* ")) lineTrimmed.removePrefix("* ") else lineTrimmed.removePrefix("- ")
+                        Row(modifier = Modifier.padding(vertical = 2.dp, horizontal = 4.dp)) {
+                            Text(text = "•", color = PremiumGold, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 8.dp))
+                            Text(text = text, style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                        }
+                    }
+                    lineTrimmed.startsWith("1. ") -> {
+                        Row(modifier = Modifier.padding(vertical = 2.dp, horizontal = 4.dp)) {
+                            Text(text = lineTrimmed.take(3), color = PremiumGold, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(end = 4.dp))
+                            Text(text = lineTrimmed.drop(3), style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                        }
+                    }
+                    lineTrimmed.isNotBlank() -> {
+                        Text(
+                            text = lineTrimmed,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = SubduedGray,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                    else -> {
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LessonsTabContent(
+    lessons: List<LessonEntity>,
+    activeLessonId: String,
+    onLessonClick: (String) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        items(lessons, key = { it.id }) { lesson ->
+            val isActive = lesson.id == activeLessonId
+            Surface(
+                color = if (isActive) Color(0xFF1E1C12) else Color(0xFF121212),
+                border = BorderStroke(1.dp, if (isActive) PremiumGold else Color(0xFF222222)),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onLessonClick(lesson.id) }
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(if (isActive) PremiumGold else Color(0xFF222222), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isActive) Icons.Default.PlayArrow else Icons.Default.Menu,
+                            contentDescription = null,
+                            tint = if (isActive) Color.Black else SubduedGray,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = lesson.title,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isActive) PremiumGold else Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "Lesson ${lesson.orderIndex}",
+                            fontSize = 10.sp,
+                            color = SubduedGray
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PdfViewerMockContent() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(200.dp)
+                .background(Color(0xFF141414), RoundedCornerShape(8.dp))
+                .border(1.dp, Color(0xFF2A2A2A), RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Default.Description,
+                    contentDescription = null,
+                    tint = PremiumGold,
+                    modifier = Modifier.size(36.dp)
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "LOCAL ATTACHED PDF MEMORY PREVIEW",
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "AASHI_PDF_CORE017.pdf • 16 pages cached",
+                    color = SubduedGray,
+                    fontSize = 10.sp
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                
+                // Mock Zoom/Page select
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = {}, modifier = Modifier.size(24.dp).background(Color(0xFF222222), CircleShape)) {
+                        Icon(imageVector = Icons.Default.Remove, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                    }
+                    Text(text = "100%", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    IconButton(onClick = {}, modifier = Modifier.size(24.dp).background(Color(0xFF222222), CircleShape)) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = "✓ PDF document read progress automatically synced offline to current lesson metadata.",
+            color = Color(0xFF81C784),
+            fontSize = 10.sp,
+            textAlign = TextAlign.Center,
+            lineHeight = 14.sp
+        )
+    }
+}
+
+// Helper: Formatter of long millis to minutes/seconds
+private fun formatTime(millis: Long): String {
+    val sec = (millis / 1000) % 60
+    val min = (millis / (1000 * 60)) % 60
+    val hr = (millis / (1000 * 60 * 60))
+    return if (hr > 0) {
+        String.format("%d:%02d:%02d", hr, min, sec)
+    } else {
+        String.format("%02d:%02d", min, sec)
     }
 }

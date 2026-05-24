@@ -11,17 +11,18 @@ import androidx.room.RoomDatabase
         ModuleEntity::class,
         LessonEntity::class,
         PlaybackProgressEntity::class,
-        BookmarkEntity::class,
-        SettingsEntity::class
+        RecentSearchEntity::class,
+        UserSettingsEntity::class
     ],
-    version = 2,
+    version = 1,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun courseDao(): CourseDao
-    abstract fun playbackProgressDao(): PlaybackProgressDao
-    abstract fun bookmarkDao(): BookmarkDao
-    abstract fun settingsDao(): SettingsDao
+    abstract fun moduleDao(): ModuleDao
+    abstract fun lessonDao(): LessonDao
+    abstract fun recentSearchDao(): RecentSearchDao
+    abstract fun userSettingsDao(): UserSettingsDao
 
     companion object {
         @Volatile
@@ -32,7 +33,7 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "ashiqplus_database"
+                    "aashiq_database"
                 )
                 .fallbackToDestructiveMigration()
                 .build()

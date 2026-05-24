@@ -1,5 +1,0 @@
-# Treat binary files strictly as binary to prevent corruption during Git line-ending conversions
-*.jar binary
-*.png binary
-*.webp binary
-*.keystore binary

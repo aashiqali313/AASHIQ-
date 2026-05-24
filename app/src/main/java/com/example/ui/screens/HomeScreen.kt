@@ -1,15 +1,12 @@
 package com.example.ui.screens
 
-import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -22,117 +19,60 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.rememberAsyncImagePainter
-import com.example.domain.Bookmark
-import com.example.domain.Course
-import com.example.domain.PlaybackProgress
+import coil.compose.AsyncImage
+import com.example.data.database.CourseEntity
+import com.example.data.database.LessonEntity
+import com.example.ui.theme.*
 import com.example.viewmodel.AppViewModel
-import com.example.ui.components.AashiqLogo
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun HomeScreen(
     viewModel: AppViewModel,
-    onNavigateToCourse: (String) -> Unit,
-    onNavigateToPlayer: (String, String) -> Unit,
-    onNavigateToBookmarks: () -> Unit,
+    onNavigateToSearch: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToSearch: () -> Unit
+    onNavigateToCourseDetail: (String) -> Unit,
+    onNavigateToPlayer: (String) -> Unit
 ) {
-    val context = LocalContext.current
-    val courses by viewModel.allCourses.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
+    val courses by viewModel.coursesState.collectAsState()
     val continueWatching by viewModel.continueWatching.collectAsState()
-    val bookmarks by viewModel.allBookmarks.collectAsState()
+    val bookmarkedLessons by viewModel.bookmarkedLessons.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
-    val importError by viewModel.importError.collectAsState()
+    val importProgress by viewModel.importProgress.collectAsState()
+    val importStatus by viewModel.importStatus.collectAsState()
 
-    // SAF directory picker
-    val folderPicker = rememberLauncherForActivityResult(
+    // SAF Directory Picker Launcher
+    val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri: Uri? ->
-        uri?.let {
-            try {
-                // Grant persistable permission so it persists reboots!
-                val contentResolver = context.contentResolver
-                val takeFlags: Int = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                contentResolver.takePersistableUriPermission(it, takeFlags)
-
-                // Trigger import
-                viewModel.importCourse(it)
-            } catch (e: Exception) {
-                // Ignore or handle
-            }
-        }
+        uri?.let { viewModel.importLocalFolder(it) }
     }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AashiqLogo(modifier = Modifier.size(34.dp), enableGlow = false)
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "AASHIQ+",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            letterSpacing = 2.sp,
-                            fontSize = 20.sp
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = onNavigateToSearch,
-                        modifier = Modifier.testTag("app_bar_search_btn")
-                    ) {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = "Search courses",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    IconButton(
-                        onClick = onNavigateToSettings,
-                        modifier = Modifier.testTag("app_bar_settings_btn")
-                    ) {
-                        Icon(
-                            Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground
-                )
-            )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { folderPicker.launch(null) },
-                icon = { Icon(Icons.Default.Add, contentDescription = "Import Course") },
-                text = { Text("IMPORT COURSE") },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier
-                    .testTag("import_course_fab")
-                    .border(1.dp, Color(0x7FFFFFFF), RoundedCornerShape(16.dp))
+            HomeTopBar(
+                onNavigateToSearch = onNavigateToSearch,
+                onNavigateToSettings = onNavigateToSettings,
+                onTriggerImport = { folderPickerLauncher.launch(null) }
             )
         }
     ) { innerPadding ->
@@ -140,41 +80,81 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(MaterialTheme.colorScheme.background)
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 80.dp)
-            ) {
-                // 1. Hero Spotlight Banner
-                item {
-                    HeroBanner(
-                        isImporting = isImporting,
-                        hasCourses = courses.isNotEmpty(),
-                        onImportClick = { folderPicker.launch(null) }
+            // Background Subtle Warm Gold Radial Glow
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(350.dp)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                PremiumGold.copy(alpha = 0.04f),
+                                Color.Transparent
+                            )
+                        )
                     )
+            )
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag("home_feed_lazycolumn"),
+                contentPadding = PaddingValues(bottom = 32.dp)
+            ) {
+                // Import overlay/header indicator
+                if (isImporting) {
+                    item {
+                        ImportProgressOverlay(
+                            status = importStatus,
+                            progress = importProgress
+                        )
+                    }
                 }
 
-                // 2. Continue Watching (Horizontal Row with status percentage)
+                // Course Carousel
+                if (courses.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "RECOMMENDED MASTERCLASSES",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = PremiumGold,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 2.sp,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
+                        )
+                        CourseHeroCarousel(
+                            courses = courses,
+                            onExploreCourse = { onNavigateToCourseDetail(it.id) }
+                        )
+                    }
+                }
+
+                // Continue Watching
                 if (continueWatching.isNotEmpty()) {
                     item {
-                        SectionHeader(title = "Continue watching")
+                        Text(
+                            text = "CONTINUE LEARNING",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = PremiumGold,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 2.sp,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp)
+                        )
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(130.dp)
                         ) {
-                            items(continueWatching) { progress ->
-                                val course = courses.find { it.id == progress.courseId }
-                                val allLessons = course?.modules?.flatMap { it.lessons } ?: emptyList()
-                                val lesson = allLessons.find { it.id == progress.lessonId }
-                                
+                            items(continueWatching, key = { it.id }) { lesson ->
                                 ContinueWatchingCard(
-                                    courseName = course?.title ?: "Unknown Course",
-                                    lessonTitle = lesson?.title ?: "Lesson Detail",
-                                    progress = progress,
-                                    thumbnailUrl = course?.thumbnail,
-                                    onClick = {
-                                        onNavigateToPlayer(progress.courseId, progress.lessonId)
+                                    lesson = lesson,
+                                    onPlayClick = {
+                                        viewModel.selectedCourseId.value = lesson.courseId
+                                        viewModel.selectedLessonId.value = lesson.id
+                                        onNavigateToPlayer(lesson.id)
                                     }
                                 )
                             }
@@ -182,67 +162,58 @@ fun HomeScreen(
                     }
                 }
 
-                // 3. Main Courses Section / Recently Imported (Grid or beautifully-styled list)
+                // All Courses Row/Grid section
                 item {
-                    SectionHeader(title = "Your offline catalog")
+                    Text(
+                        text = "EXPLORE PLATFORM",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = PremiumGold,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp)
+                    )
                 }
 
                 if (courses.isEmpty() && !isImporting) {
                     item {
-                        EmptyCatalogState(onImportClick = { folderPicker.launch(null) })
-                    }
-                } else if (isImporting) {
-                    item {
-                        ShimmerLoadingCatalog()
+                        EmptyCoursesPlaceholder(
+                            onImportClick = { folderPickerLauncher.launch(null) }
+                        )
                     }
                 } else {
-                    items(courses) { course ->
-                        CourseLuxuryCard(
+                    items(courses, key = { it.id }) { course ->
+                        CourseRowItem(
                             course = course,
-                            onClick = { onNavigateToCourse(course.id) },
-                            onDelete = { viewModel.deleteCourse(course.id) }
+                            onCourseClick = { onNavigateToCourseDetail(it.id) }
                         )
                     }
                 }
 
-                // 4. Bookmarks Quick Access List
-                if (bookmarks.isNotEmpty()) {
+                // Bookmarks collection preview
+                if (bookmarkedLessons.isNotEmpty()) {
                     item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Bookmarks",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            TextButton(onClick = onNavigateToBookmarks) {
-                                Text(
-                                    "SEE ALL",
-                                    color = MaterialTheme.colorScheme.primary,
-                                    style = MaterialTheme.typography.labelLarge
-                                )
-                            }
-                        }
-                    }
-
-                    item {
+                        Text(
+                            text = "SAVED MOMENTS",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = PremiumGold,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 2.sp,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp)
+                        )
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(90.dp)
                         ) {
-                            items(bookmarks.take(5)) { bookmark ->
-                                val courseName = courses.find { it.id == bookmark.courseId }?.title ?: ""
-                                BookmarkQuickCard(
-                                    bookmark = bookmark,
-                                    courseName = courseName,
+                            items(bookmarkedLessons, key = { it.id }) { lesson ->
+                                BookmarkChipItem(
+                                    lesson = lesson,
                                     onClick = {
-                                        onNavigateToPlayer(bookmark.courseId, bookmark.lessonId)
+                                        viewModel.selectedCourseId.value = lesson.courseId
+                                        viewModel.selectedLessonId.value = lesson.id
+                                        onNavigateToPlayer(lesson.id)
                                     }
                                 )
                             }
@@ -250,401 +221,472 @@ fun HomeScreen(
                     }
                 }
             }
-
-            // High-fidelity active importing overlay
-            if (isImporting) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(0x99000000))
-                        .clickable(enabled = false) {},
-                    contentAlignment = Alignment.Center
-                ) {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.width(280.dp),
-                        elevation = CardDefaults.cardElevation(8.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                "IMPORTING LOCAL ARCHIVE",
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 14.sp,
-                                letterSpacing = 2.sp
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                "Scanning folder files, validating course.json structures, index, and cache permissions...",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 11.sp,
-                                modifier = Modifier.padding(horizontal = 8.dp),
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                }
-            }
-
-            // High-fidelity luxury Error Dialog for broken schemas
-            if (importError != null) {
-                AlertDialog(
-                    onDismissRequest = { viewModel.clearImportError() },
-                    icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(36.dp)) },
-                    title = {
-                        Text(
-                            "Course Verification Failed",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    },
-                    text = {
-                        Column {
-                            Text(
-                                "We encountered a format or structural error during offline course import:",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0x20FF1744), RoundedCornerShape(8.dp))
-                                    .border(1.dp, Color(0x50FF1744), RoundedCornerShape(8.dp))
-                                    .padding(12.dp)
-                            ) {
-                                Text(
-                                    importError ?: "Unmapped validation error.",
-                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                                    fontSize = 12.sp,
-                                    color = Color(0xFFFF5252)
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text(
-                                "Please ensure your folder includes a valid 'course.json' file referencing existing local videos paths, thumbnail, modules structures and unique lesson IDs.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = { viewModel.clearImportError() },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                        ) {
-                            Text("GOT IT")
-                        }
-                    },
-                    modifier = Modifier.testTag("import_error_dialog")
-                )
-            }
         }
     }
 }
 
 @Composable
-fun HeroBanner(
-    isImporting: Boolean,
-    hasCourses: Boolean,
-    onImportClick: () -> Unit
+fun HomeTopBar(
+    onNavigateToSearch: () -> Unit,
+    onNavigateToSettings: () -> Unit,
+    onTriggerImport: () -> Unit
 ) {
-    Box(
+    Surface(
+        color = MaterialTheme.colorScheme.background,
+        border = BorderStroke(0.5.dp, Color(0xFF222222)),
         modifier = Modifier
             .fillMaxWidth()
-            .height(210.dp)
-            .padding(16.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(Color(0xFF2C2518), Color(0xFF0F0F11), Color(0xFF131316)),
-                    start = Offset(0f, 0f),
-                    end = Offset.Infinite
-                )
-            )
-            .border(1.dp, Color(0x20D4AF37), RoundedCornerShape(20.dp)),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        // Spotlight radial background design
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(Color(0x22D4AF37), Color.Transparent),
-                        center = Offset(240.dp.value, 60.dp.value),
-                        radius = 280.dp.value
-                    )
-                )
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Surface(
-                    color = Color(0xFFD4AF37),
-                    shape = RoundedCornerShape(50),
-                    modifier = Modifier.height(20.dp)
-                ) {
-                    Text(
-                        "STUDIO PREMIUM",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF0F0F11),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                        letterSpacing = 1.sp
-                    )
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-                Text(
-                    "Your Cinematic Offline Learning Lab",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color.White,
-                    letterSpacing = 0.5.sp
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    if (hasCourses) "All lessons are fully operational, indexed and played locally."
-                    else "Ready to ingest high-definition media courses directly from safety folders.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFAEAEB2)
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                if (!hasCourses) {
-                    Button(
-                        onClick = onImportClick,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-                        modifier = Modifier.height(36.dp)
-                    ) {
-                        Text("IMPORT COURSE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-            AashiqLogo(
-                modifier = Modifier
-                    .size(110.dp)
-                    .padding(start = 12.dp),
-                enableGlow = true
-            )
-        }
-    }
-}
-
-@Composable
-fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 16.dp, top = 20.dp, bottom = 10.dp),
-        color = MaterialTheme.colorScheme.onSurface,
-        letterSpacing = 0.5.sp
-    )
-}
-
-@Composable
-fun ContinueWatchingCard(
-    courseName: String,
-    lessonTitle: String,
-    progress: PlaybackProgress,
-    thumbnailUrl: String?,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .width(280.dp)
-            .height(115.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .clickable { onClick() }
-            .border(1.dp, Color(0x18FFFFFF), RoundedCornerShape(14.dp)),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(2.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Circular thumbnail or fallback logo play
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF131316)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (thumbnailUrl != null) {
-                        Image(
-                            painter = rememberAsyncImagePainter(model = thumbnailUrl),
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Icon(
-                            Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                Column {
-                    Text(
-                        courseName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        lessonTitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        "Last accessed: offline save",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFFAEAEB2),
-                        fontSize = 10.sp
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Percentage calculation
-            val ratio = if (progress.completed) 1f else 0.45f // simple fallback for illustrative slider progress bar
-            // Let's draw real progress progress bar using native components
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                LinearProgressIndicator(
-                    progress = { ratio },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(4.dp)
-                        .clip(CircleShape),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color(0x30FFFFFF)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = if (progress.completed) "100%" else "In Progress",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun CourseLuxuryCard(
-    course: Course,
-    onClick: () -> Unit,
-    onDelete: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { onClick() }
-            .border(1.dp, Color(0x15FFFFFF), RoundedCornerShape(16.dp)),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            .shadow(elevation = 10.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Document / Image thumbnail
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF131316))
-                    .border(1.dp, Color(0x10D4AF37), RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (course.thumbnail != null) {
-                    Image(
-                        painter = rememberAsyncImagePainter(model = course.thumbnail),
+            // Elegant Glow Brand Icon
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .background(Color(0xFF161616), RoundedCornerShape(17.dp))
+                        .border(1.dp, PremiumGold, RoundedCornerShape(17.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
                         contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
+                        tint = PremiumGold,
+                        modifier = Modifier.size(16.dp)
                     )
-                } else {
-                    AashiqLogo(modifier = Modifier.size(50.dp), enableGlow = false)
                 }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = "AASHIQ+",
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 18.sp,
+                    color = PremiumGold,
+                    letterSpacing = 1.5.sp
+                )
             }
 
-            Spacer(modifier = Modifier.width(16.dp))
+            // Quick Actions Block
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Import file button
+                IconButton(
+                    onClick = onTriggerImport,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Color(0xFF141414), CircleShape)
+                        .border(0.5.dp, Color(0xFF333333), CircleShape)
+                        .testTag("home_import_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Import local course folder",
+                        tint = PremiumGold,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
 
-            Column(modifier = Modifier.weight(1f)) {
+                // Global search button
+                IconButton(
+                    onClick = onNavigateToSearch,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Color(0xFF141414), CircleShape)
+                        .border(0.5.dp, Color(0xFF333333), CircleShape)
+                        .testTag("home_search_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Global Search",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Settings button
+                IconButton(
+                    onClick = onNavigateToSettings,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Color(0xFF141414), CircleShape)
+                        .border(0.5.dp, Color(0xFF333333), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ImportProgressOverlay(status: String, progress: Float) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+            .background(Color(0xFF111111), RoundedCornerShape(12.dp))
+            .border(1.dp, PremiumGold.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+            .padding(16.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text(
-                    course.author.uppercase(),
-                    fontSize = 10.sp,
-                    letterSpacing = 1.sp,
-                    color = MaterialTheme.colorScheme.primary,
+                    text = "IMPORTING COURSE FOLDER",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = PremiumGold,
                     fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "${(progress * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = SoftGoldGlow
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            LinearProgressIndicator(
+                progress = progress,
+                color = PremiumGold,
+                trackColor = Color(0xFF222222),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = status,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                color = SubduedGray,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+fun CourseHeroCarousel(courses: List<CourseEntity>, onExploreCourse: (CourseEntity) -> Unit) {
+    var activePage by remember { mutableStateOf(0) }
+
+    // Auto rotate Hero Carousel
+    LaunchedEffect(courses) {
+        while (courses.size > 1) {
+            delay(5000)
+            activePage = (activePage + 1) % courses.size
+        }
+    }
+
+    if (activePage >= courses.size) {
+        activePage = 0
+    }
+    
+    val activeCourse = courses.getOrNull(activePage) ?: return
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+            .height(200.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .border(1.dp, Color(0xFF333333), RoundedCornerShape(16.dp))
+            .background(Color(0xFF121212))
+            .clickable { onExploreCourse(activeCourse) }
+    ) {
+        // Thumbnail Image
+        AsyncImage(
+            model = activeCourse.thumbnailUri,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Dark Gradient overlay
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.95f))
+                    )
+                )
+        )
+
+        // Upper Category pill
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(12.dp)
+                .background(TranslucentGlass, RoundedCornerShape(20.dp))
+                .border(0.5.dp, PremiumGold.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = activeCourse.category.uppercase(),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = PremiumGold,
+                letterSpacing = 1.sp
+            )
+        }
+
+        // Details Block
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp)
+        ) {
+            Text(
+                text = activeCourse.title,
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = PremiumGold,
+                    modifier = Modifier.size(12.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = activeCourse.author,
+                    fontSize = 11.sp,
+                    color = SubduedGray,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+
+        // Slide Indicators dots
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            courses.forEachIndexed { index, _ ->
+                Box(
+                    modifier = Modifier
+                        .size(if (index == activePage) 16.dp else 6.dp, 6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(if (index == activePage) PremiumGold else Color.Gray.copy(alpha = 0.5f))
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ContinueWatchingCard(lesson: LessonEntity, onPlayClick: () -> Unit) {
+    Surface(
+        color = Color(0xFF141414),
+        border = BorderStroke(1.dp, Color(0xFF252525)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .width(220.dp)
+            .height(115.dp)
+            .clickable { onPlayClick() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    text = lesson.title,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    course.title,
-                    style = MaterialTheme.typography.titleMedium,
+                    text = "Resume",
+                    fontSize = 10.sp,
+                    color = PremiumGold,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            // Slim gold custom progress indicator bar
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Watched ${lesson.playProgressPercent}%",
+                        fontSize = 9.sp,
+                        color = SubduedGray
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                LinearProgressIndicator(
+                    progress = lesson.playProgressPercent / 100f,
+                    color = PremiumGold,
+                    trackColor = Color(0xFF292929),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(1.5.dp))
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CourseRowItem(course: CourseEntity, onCourseClick: (CourseEntity) -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clickable { onCourseClick(course) }
+            .testTag("course_item_card_${course.id}"),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF121212)),
+        border = BorderStroke(0.5.dp, Color(0xFF2A2A2A)),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Elegant Rounded Thumbnail
+            AsyncImage(
+                model = course.thumbnailUri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(0.5.dp, Color(0xFF444444), RoundedCornerShape(8.dp))
+            )
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .background(Color(0xFF221F14), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = course.category.uppercase(),
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PremiumGold,
+                        letterSpacing = 0.5.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = course.title,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+
+                Spacer(modifier = Modifier.height(2.dp))
+
                 Text(
-                    course.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFAEAEB2),
+                    text = course.description,
+                    fontSize = 11.sp,
+                    color = SubduedGray,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.testTag("delete_course_${course.id}")
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowRight,
+                contentDescription = null,
+                tint = PremiumGold,
+                modifier = Modifier.padding(start = 6.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun BookmarkChipItem(lesson: LessonEntity, onClick: () -> Unit) {
+    Surface(
+        color = Color(0xFF161616),
+        border = BorderStroke(0.5.dp, Color(0xFF333333)),
+        shape = RoundedCornerShape(10.dp),
+        modifier = Modifier
+            .width(170.dp)
+            .height(70.dp)
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .background(Color(0xFF261D0C), CircleShape),
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Uninstall course",
-                    tint = Color(0xFFFF5252).copy(alpha = 0.85f)
+                    imageVector = Icons.Default.Bookmark,
+                    contentDescription = null,
+                    tint = PremiumGold,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(verticalArrangement = Arrangement.Center) {
+                Text(
+                    text = lesson.title,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "Launch saved play",
+                    fontSize = 10.sp,
+                    color = SubduedGray
                 )
             }
         }
@@ -652,133 +694,66 @@ fun CourseLuxuryCard(
 }
 
 @Composable
-fun BookmarkQuickCard(
-    bookmark: Bookmark,
-    courseName: String,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .width(170.dp)
-            .clickable { onClick() }
-            .border(1.dp, Color(0x10FFFFFF), RoundedCornerShape(12.dp)),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Icon(
-                Icons.Default.Favorite,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                bookmark.lessonTitle,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                courseName,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.primary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                "Bookmark @ ${formatDuration(bookmark.timestamp / 1000)}",
-                fontSize = 9.sp,
-                color = Color(0xFFAEAEB2)
-            )
-        }
-    }
-}
-
-@Composable
-fun EmptyCatalogState(onImportClick: () -> Unit) {
+fun EmptyCoursesPlaceholder(onImportClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(all = 40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .padding(24.dp)
+            .background(Color(0xFF111111), RoundedCornerShape(16.dp))
+            .border(1.dp, Color(0xFF252525), RoundedCornerShape(16.dp))
+            .padding(vertical = 32.dp, horizontal = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
             modifier = Modifier
-                .size(90.dp)
-                .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
-                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), CircleShape),
+                .size(60.dp)
+                .background(Color(0xFF1B1A12), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                Icons.Default.Star,
+                imageVector = Icons.Default.Add,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                modifier = Modifier.size(44.dp)
+                tint = PremiumGold,
+                modifier = Modifier.size(28.dp)
             )
         }
+
         Spacer(modifier = Modifier.height(16.dp))
+
         Text(
-            "NO LOCAL COURSES FOUND",
-            fontWeight = FontWeight.Bold,
-            fontSize = 15.sp,
-            color = MaterialTheme.colorScheme.onSurface,
-            letterSpacing = 1.5.sp
+            text = "Your Drive Library is Vacant",
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White,
+            fontWeight = FontWeight.Bold
         )
+
         Spacer(modifier = Modifier.height(6.dp))
+
         Text(
-            "Access high-fidelity cinematic video tutorials fully offline. Connect local folders using secure SAF imports to build your list.",
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp)
+            text = "Select any local folder on your Android unit loaded with media structures (.mp4) and notes (.md) to compile offline courses instantly on Device.",
+            fontSize = 11.sp,
+            color = SubduedGray,
+            lineHeight = 16.sp,
+            modifier = Modifier.padding(horizontal = 16.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
+
         Spacer(modifier = Modifier.height(20.dp))
+
         Button(
             onClick = onImportClick,
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.testTag("empty_state_import_btn")
+            colors = ButtonDefaults.buttonColors(
+                containerColor = PremiumGold,
+                contentColor = Color.Black
+            ),
+            shape = RoundedCornerShape(8.dp)
         ) {
-            Text("CHOOSE FOLDER TO IMPORT", fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-fun ShimmerLoadingCatalog() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        repeat(3) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .drawWithContent {
-                        // Drawing static dark shimmering bounds for elegant rendering
-                        drawContent()
-                    }
+            Text(
+                text = "INDEX STORAGE DIRECTORY",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
             )
         }
-    }
-}
-
-fun formatDuration(seconds: Long): String {
-    val h = seconds / 3600
-    val m = (seconds % 3600) / 60
-    val s = seconds % 60
-    return if (h > 0) {
-        String.format("%d:%02d:%02d", h, m, s)
-    } else {
-        String.format("%02d:%02d", m, s)
     }
 }

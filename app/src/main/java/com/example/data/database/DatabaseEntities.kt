@@ -8,57 +8,63 @@ data class CourseEntity(
     @PrimaryKey val id: String,
     val title: String,
     val description: String,
-    val thumbnail: String?,
-    val author: String,
-    val version: Int,
-    val courseUri: String,
-    val dateImported: Long = System.currentTimeMillis()
+    val uriString: String,
+    val thumbnailUri: String,
+    val category: String,
+    val author: String = "AASHIQ+ Premium Guild",
+    val isRecentlyImported: Boolean = false,
+    val importTimestamp: Long = System.currentTimeMillis()
 )
 
 @Entity(tableName = "modules")
 data class ModuleEntity(
-    @PrimaryKey val id: String, // courseId + "_" + title
+    @PrimaryKey val id: String,
     val courseId: String,
-    val title: String
+    val title: String,
+    val orderIndex: Int
 )
 
 @Entity(tableName = "lessons")
 data class LessonEntity(
-    @PrimaryKey val id: String, // lessonId
+    @PrimaryKey val id: String,
     val moduleId: String,
     val courseId: String,
     val title: String,
-    val videoPath: String,
-    val notePath: String?,
-    val subtitlePath: String? = null,
-    val duration: Int
+    val videoUri: String,
+    val notePath: String?, // Markdown note or rich description text
+    val durationSeconds: Long = 0L,
+    val orderIndex: Int,
+    val isBookmarked: Boolean = false,
+    val lastWatchedTimestamp: Long = 0L,
+    val playProgressPercent: Int = 0,
+    val progressMs: Long = 0L
 )
 
 @Entity(tableName = "playback_progress")
 data class PlaybackProgressEntity(
     @PrimaryKey val lessonId: String,
     val courseId: String,
-    val currentPosition: Long,
-    val completed: Boolean,
-    val playbackSpeed: Float = 1.0f,
-    val lastWatched: Long = System.currentTimeMillis()
+    val playProgressMs: Long,
+    val totalDurationMs: Long,
+    val lastWatchedTime: Long
 )
 
-@Entity(tableName = "bookmarks")
-data class BookmarkEntity(
-    @PrimaryKey(autoGenerate = true) val id: Int = 0,
-    val courseId: String,
-    val lessonId: String,
-    val lessonTitle: String,
-    val timestamp: Long,
-    val createdAt: Long = System.currentTimeMillis()
+@Entity(tableName = "recent_searches")
+data class RecentSearchEntity(
+    @PrimaryKey val query: String,
+    val timestamp: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "settings")
-data class SettingsEntity(
-    @PrimaryKey val id: Int = 1, // Row ID 1 is the active singleton settings row
-    val theme: String = "DARK",
+@Entity(tableName = "user_settings")
+data class UserSettingsEntity(
+    @PrimaryKey val id: String = "app_config",
+    val darkTheme: Boolean = true,
+    val amoledBlack: Boolean = true,
+    val accentColorGold: Boolean = true,
     val defaultSpeed: Float = 1.0f,
-    val autoplay: Boolean = true,
-    val animationsEnabled: Boolean = true
+    val showSubtitles: Boolean = true,
+    val volumeGestureEnabled: Boolean = true,
+    val brightnessGestureEnabled: Boolean = true,
+    val doubleTapSeekEnabled: Boolean = true,
+    val animationIntensityMultiplier: Float = 1.0f
 )

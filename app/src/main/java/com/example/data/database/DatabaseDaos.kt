@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CourseDao {
-    @Query("SELECT * FROM courses ORDER BY dateImported DESC")
+    @Query("SELECT * FROM courses ORDER BY importTimestamp DESC")
     fun getAllCourses(): Flow<List<CourseEntity>>
 
     @Query("SELECT * FROM courses WHERE id = :id LIMIT 1")
@@ -15,87 +15,86 @@ interface CourseDao {
     suspend fun insertCourse(course: CourseEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertModules(modules: List<ModuleEntity>)
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertLessons(lessons: List<LessonEntity>)
+    suspend fun insertCourses(courses: List<CourseEntity>)
 
     @Query("DELETE FROM courses WHERE id = :courseId")
-    suspend fun deleteCourseOnly(courseId: String)
+    suspend fun deleteCourseById(courseId: String)
+
+    @Query("DELETE FROM courses")
+    suspend fun deleteAllCourses()
+}
+
+@Dao
+interface ModuleDao {
+    @Query("SELECT * FROM modules WHERE courseId = :courseId ORDER BY orderIndex ASC")
+    fun getModulesForCourse(courseId: String): Flow<List<ModuleEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertModules(modules: List<ModuleEntity>)
 
     @Query("DELETE FROM modules WHERE courseId = :courseId")
     suspend fun deleteModulesForCourse(courseId: String)
 
+    @Query("DELETE FROM modules")
+    suspend fun deleteAllModules()
+}
+
+@Dao
+interface LessonDao {
+    @Query("SELECT * FROM lessons WHERE moduleId = :moduleId ORDER BY orderIndex ASC")
+    fun getLessonsForModule(moduleId: String): Flow<List<LessonEntity>>
+
+    @Query("SELECT * FROM lessons WHERE courseId = :courseId ORDER BY orderIndex ASC")
+    fun getLessonsForCourse(courseId: String): Flow<List<LessonEntity>>
+
+    @Query("SELECT * FROM lessons WHERE id = :id LIMIT 1")
+    suspend fun getLessonById(id: String): LessonEntity?
+
+    @Query("SELECT * FROM lessons WHERE isBookmarked = 1 ORDER BY lastWatchedTimestamp DESC")
+    fun getBookmarkedLessons(): Flow<List<LessonEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLessons(lessons: List<LessonEntity>)
+
+    @Query("UPDATE lessons SET isBookmarked = :isBookmarked WHERE id = :lessonId")
+    suspend fun updateBookmark(lessonId: String, isBookmarked: Boolean)
+
+    @Query("UPDATE lessons SET progressMs = :progressMs, playProgressPercent = :percent, lastWatchedTimestamp = :timestamp WHERE id = :lessonId")
+    suspend fun updateProgress(lessonId: String, progressMs: Long, percent: Int, timestamp: Long)
+
+    @Query("SELECT * FROM lessons WHERE lastWatchedTimestamp > 0 ORDER BY lastWatchedTimestamp DESC")
+    fun getContinueWatchingLessons(): Flow<List<LessonEntity>>
+    
     @Query("DELETE FROM lessons WHERE courseId = :courseId")
     suspend fun deleteLessonsForCourse(courseId: String)
 
-    @Transaction
-    suspend fun deleteCourseCascade(courseId: String) {
-        deleteLessonsForCourse(courseId)
-        deleteModulesForCourse(courseId)
-        deleteCourseOnly(courseId)
-    }
-
-    @Query("SELECT * FROM modules WHERE courseId = :courseId")
-    fun getModulesForCourse(courseId: String): Flow<List<ModuleEntity>>
-
-    @Query("SELECT * FROM lessons WHERE courseId = :courseId")
-    fun getLessonsForCourse(courseId: String): Flow<List<LessonEntity>>
-
-    @Query("SELECT * FROM lessons WHERE courseId = :courseId")
-    suspend fun getLessonsForCourseSync(courseId: String): List<LessonEntity>
-
-    @Query("SELECT * FROM lessons WHERE id = :lessonId LIMIT 1")
-    fun getLessonById(lessonId: String): Flow<LessonEntity?>
-
-    @Query("SELECT * FROM lessons WHERE id = :lessonId LIMIT 1")
-    suspend fun getLessonByIdSync(lessonId: String): LessonEntity?
+    @Query("DELETE FROM lessons")
+    suspend fun deleteAllLessons()
 }
 
 @Dao
-interface PlaybackProgressDao {
-    @Query("SELECT * FROM playback_progress WHERE courseId = :courseId")
-    fun getProgressForCourse(courseId: String): Flow<List<PlaybackProgressEntity>>
-
-    @Query("SELECT * FROM playback_progress WHERE lessonId = :lessonId LIMIT 1")
-    fun getProgressForLesson(lessonId: String): Flow<PlaybackProgressEntity?>
-
-    @Query("SELECT * FROM playback_progress WHERE lessonId = :lessonId LIMIT 1")
-    suspend fun getProgressForLessonSync(lessonId: String): PlaybackProgressEntity?
-
-    @Query("SELECT * FROM playback_progress ORDER BY lastWatched DESC")
-    fun getContinueWatching(): Flow<List<PlaybackProgressEntity>>
+interface RecentSearchDao {
+    @Query("SELECT * FROM recent_searches ORDER BY timestamp DESC LIMIT 15")
+    fun getRecentSearches(): Flow<List<RecentSearchEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertProgress(progress: PlaybackProgressEntity)
+    suspend fun insertSearch(search: RecentSearchEntity)
+
+    @Query("DELETE FROM recent_searches WHERE `query` = :query")
+    suspend fun deleteSearch(query: String)
+
+    @Query("DELETE FROM recent_searches")
+    suspend fun deleteAllSearches()
 }
 
 @Dao
-interface BookmarkDao {
-    @Query("SELECT * FROM bookmarks ORDER BY createdAt DESC")
-    fun getAllBookmarks(): Flow<List<BookmarkEntity>>
+interface UserSettingsDao {
+    @Query("SELECT * FROM user_settings WHERE id = 'app_config' LIMIT 1")
+    fun getSettingsFlow(): Flow<UserSettingsEntity?>
 
-    @Query("SELECT * FROM bookmarks WHERE courseId = :courseId ORDER BY timestamp ASC")
-    fun getBookmarksForCourse(courseId: String): Flow<List<BookmarkEntity>>
-
-    @Query("SELECT * FROM bookmarks WHERE lessonId = :lessonId ORDER BY timestamp ASC")
-    fun getBookmarksForLesson(lessonId: String): Flow<List<BookmarkEntity>>
+    @Query("SELECT * FROM user_settings WHERE id = 'app_config' LIMIT 1")
+    suspend fun getSettingsDirect(): UserSettingsEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertBookmark(bookmark: BookmarkEntity)
-
-    @Query("DELETE FROM bookmarks WHERE id = :id")
-    suspend fun deleteBookmark(id: Int)
-}
-
-@Dao
-interface SettingsDao {
-    @Query("SELECT * FROM settings WHERE id = 1 LIMIT 1")
-    fun getSettings(): Flow<SettingsEntity?>
-
-    @Query("SELECT * FROM settings WHERE id = 1 LIMIT 1")
-    suspend fun getSettingsSync(): SettingsEntity?
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertOrUpdateSettings(settings: SettingsEntity)
+    suspend fun insertSettings(settings: UserSettingsEntity)
 }

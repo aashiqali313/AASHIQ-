@@ -4,207 +4,283 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.data.database.AppDatabase
-import com.example.domain.Bookmark
-import com.example.domain.Course
-import com.example.domain.PlaybackProgress
-import com.example.domain.Settings
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import com.example.data.database.*
 import com.example.repository.CourseRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
+@OptIn(FlowPreview::class)
 class AppViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val database = AppDatabase.getDatabase(application)
-    private val repository = CourseRepository(
-        context = application,
-        courseDao = database.courseDao(),
-        progressDao = database.playbackProgressDao(),
-        bookmarkDao = database.bookmarkDao(),
-        settingsDao = database.settingsDao()
-    )
+    private val db = AppDatabase.getDatabase(application)
+    val repository = CourseRepository(db)
 
-    // UI state flows
-    val allCourses: StateFlow<List<Course>> = repository.allCourses
+    // User configurations
+    val settingsState: StateFlow<UserSettingsEntity> = repository.userSettings
+        .map { it ?: UserSettingsEntity() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserSettingsEntity())
+
+    // All available courses
+    val coursesState: StateFlow<List<CourseEntity>> = repository.allCourses
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val settings: StateFlow<Settings> = repository.settings
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Settings())
-
-    val continueWatching: StateFlow<List<PlaybackProgress>> = repository.getContinueWatching()
+    // Books, settings, continue watching
+    val bookmarkedLessons: StateFlow<List<LessonEntity>> = repository.bookmarkedLessons
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val allBookmarks: StateFlow<List<Bookmark>> = repository.allBookmarks
+    val continueWatching: StateFlow<List<LessonEntity>> = repository.continueWatching
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Interactive states
-    private val _isImporting = MutableStateFlow(false)
-    val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
+    val recentSearches: StateFlow<List<RecentSearchEntity>> = repository.recentSearches
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _importError = MutableStateFlow<String?>(null)
-    val importError: StateFlow<String?> = _importError.asStateFlow()
-
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
-
-    // Active course detail state
-    private val _activeCourseId = MutableStateFlow<String?>(null)
-    val activeCourse: StateFlow<Course?> = _activeCourseId
+    // Active state identifiers
+    val selectedCourseId = MutableStateFlow<String?>(null)
+    val selectedLessonId = MutableStateFlow<String?>(null)
+    
+    // Active course entity
+    val activeCourse: StateFlow<CourseEntity?> = selectedCourseId
         .flatMapLatest { id ->
-            if (id == null) flowOf(null)
-            else repository.getCourseDetail(id)
+            if (id == null) flowOf<CourseEntity?>(null)
+            else flow { emit(repository.getCourseById(id)) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // Modules under active course
+    val activeModules: StateFlow<List<ModuleEntity>> = selectedCourseId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(emptyList())
+            else repository.getModulesForCourse(id)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Lessons under active course
+    val activeLessons: StateFlow<List<LessonEntity>> = selectedCourseId
+        .flatMapLatest { id ->
+            if (id == null) flowOf(emptyList())
+            else repository.getLessonsForCourse(id)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Active playing lesson
+    val activeLesson: StateFlow<LessonEntity?> = selectedLessonId
+        .flatMapLatest { id ->
+            if (id == null) flowOf<LessonEntity?>(null)
+            else flow { emit(repository.getLessonById(id)) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // Search Engine
+    val searchQuery = MutableStateFlow("")
+    
+    // Realtime compiled search result state covering courses, modules, lessons, notes, tags
+    val searchResults: StateFlow<SearchResultsData> = searchQuery
+        .debounce(150)
+        .flatMapLatest { query ->
+            if (query.isBlank()) {
+                flowOf(SearchResultsData())
+            } else {
+                combine(
+                    coursesState,
+                    rowLessonsFlow() // helper flow of all lessons in database
+                ) { courses, allLessons ->
+                    filterSearchResults(query, courses, allLessons)
+                }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SearchResultsData())
+
+    // Import states
+    val isImporting = MutableStateFlow(false)
+    val importProgress = MutableStateFlow(0.0f)
+    val importStatus = MutableStateFlow("")
+    val importSuccess = MutableStateFlow(false)
+
+    // Shared ExoPlayer instance for performance-optimized instant video loading
+    private var _exoPlayer: ExoPlayer? = null
+    val exoPlayer: ExoPlayer?
+        get() {
+            if (_exoPlayer == null) {
+                _exoPlayer = ExoPlayer.Builder(getApplication())
+                    .setHandleAudioBecomingNoisy(true)
+                    .build().apply {
+                        repeatMode = Player.REPEAT_MODE_OFF
+                        playWhenReady = true
+                    }
+            }
+            return _exoPlayer
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    // Active playing lesson state
-    private val _activeLessonId = MutableStateFlow<String?>(null)
-    val activeLessonId: StateFlow<String?> = _activeLessonId.asStateFlow()
-
-    // Note renderer content
-    private val _activeNoteContent = MutableStateFlow("")
-    val activeNoteContent: StateFlow<String> = _activeNoteContent.asStateFlow()
-
-    private val _isNoteLoading = MutableStateFlow(false)
-    val isNoteLoading: StateFlow<Boolean> = _isNoteLoading.asStateFlow()
-
-    // Recent search storage in memory
-    private val _recentSearches = MutableStateFlow<List<String>>(emptyList())
-    val recentSearches: StateFlow<List<String>> = _recentSearches.asStateFlow()
-
-    fun setSearchQuery(query: String) {
-        _searchQuery.value = query
-    }
-
-    fun addRecentSearch(query: String) {
-        if (query.isNotBlank()) {
-            val list = _recentSearches.value.toMutableList()
-            list.remove(query)
-            list.add(0, query)
-            _recentSearches.value = list.take(5) // Limit to 5
-        }
-    }
-
-    fun clearRecentSearches() {
-        _recentSearches.value = emptyList()
-    }
-
-    fun selectCourse(courseId: String?) {
-        _activeCourseId.value = courseId
-    }
-
-    fun selectLesson(lessonId: String?) {
-        _activeLessonId.value = lessonId
-    }
-
-    fun clearImportError() {
-        _importError.value = null
-    }
-
-    // Load active lesson markdown notes asynchronously
-    fun loadLessonNote(courseUri: String, notePath: String?) {
-        if (notePath.isNullOrEmpty()) {
-            _activeNoteContent.value = ""
-            return
-        }
+    init {
         viewModelScope.launch {
-            _isNoteLoading.value = true
-            val content = repository.readNoteContent(courseUri, notePath)
-            _activeNoteContent.value = content
-            _isNoteLoading.value = false
+            // High-reliability pre-loading
+            repository.prepopulateIfEmpty()
         }
     }
 
-    // Actions
-    fun importCourse(treeUri: Uri) {
+    // Load video into active player
+    fun playLessonVideo(lesson: LessonEntity) {
+        val player = exoPlayer ?: return
+        viewModelScope.launch(Dispatchers.Main) {
+            val mediaItem = MediaItem.fromUri(lesson.videoUri)
+            player.setMediaItem(mediaItem)
+            
+            // Auto resume / Continue Watching check
+            if (lesson.progressMs > 0 && lesson.playProgressPercent < 95) {
+                player.seekTo(lesson.progressMs)
+            } else {
+                player.seekTo(0)
+            }
+            player.prepare()
+            player.play()
+        }
+    }
+
+    // Save video progress in Room database
+    fun savePlayingProgress(lessonId: String, currentPosMs: Long, totalDurationMs: Long) {
+        if (totalDurationMs <= 0) return
+        val percent = ((currentPosMs * 100) / totalDurationMs).coerceIn(0, 100).toInt()
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.updateLessonProgress(lessonId, currentPosMs, percent)
+        }
+    }
+
+    // Folder local import flow
+    fun importLocalFolder(treeUri: Uri) {
         viewModelScope.launch {
-            _isImporting.value = true
-            _importError.value = null
-            try {
-                repository.importCourseFromUri(treeUri)
-            } catch (e: Exception) {
-                _importError.value = e.message ?: "An unknown database file verification error occurred."
-            } finally {
-                _isImporting.value = false
+            isImporting.value = true
+            importSuccess.value = false
+            importProgress.value = 0.0f
+            importStatus.value = "Initializing secure connection..."
+
+            val success = repository.importCourseFolder(
+                getApplication(),
+                treeUri
+            ) { status, progress ->
+                importStatus.value = status
+                importProgress.value = progress
+            }
+
+            isImporting.value = false
+            importSuccess.value = success
+            if (!success) {
+                importStatus.value = "Import failed. Verify video content or folder permissions."
+            } else {
+                importStatus.value = "Import Complete!"
             }
         }
     }
 
+    fun toggleBookmark(lessonId: String) {
+        viewModelScope.launch {
+            repository.toggleBookmark(lessonId)
+        }
+    }
+
+    fun searchTriggered(query: String) {
+        searchQuery.value = query
+        viewModelScope.launch {
+            repository.addRecentSearch(query)
+        }
+    }
+
+    fun deleteSearch(query: String) {
+        viewModelScope.launch {
+            repository.deleteRecentSearch(query)
+        }
+    }
+
+    fun clearSearchHistory() {
+        viewModelScope.launch {
+            repository.clearAllSearches()
+        }
+    }
+
+    fun updateSettings(settings: UserSettingsEntity) {
+        viewModelScope.launch {
+            repository.saveUserSettings(settings)
+        }
+    }
+
+    // Helper: Flow emitting all lessons in the DB for lightning-fast search
+    private fun rowLessonsFlow(): Flow<List<LessonEntity>> {
+        return coursesState.flatMapLatest { courses ->
+            if (courses.isEmpty()) {
+                flowOf(emptyList())
+            } else {
+                val listFlows = courses.map { repository.getLessonsForCourse(it.id) }
+                combine(listFlows) { arrays ->
+                    arrays.flatMap { it.toList() }
+                }
+            }
+        }
+    }
+
+    // Index-match filtering search
+    private fun filterSearchResults(
+        query: String,
+        courses: List<CourseEntity>,
+        lessons: List<LessonEntity>
+    ): SearchResultsData {
+        val q = query.trim().lowercase()
+        
+        val matchedCourses = courses.filter {
+            it.title.lowercase().contains(q) || 
+            it.description.lowercase().contains(q) ||
+            it.category.lowercase().contains(q)
+        }
+
+        val matchedLessons = lessons.filter {
+            it.title.lowercase().contains(q) || 
+            (it.notePath != null && it.notePath.lowercase().contains(q))
+        }
+
+        return SearchResultsData(
+            matchedCourses = matchedCourses,
+            matchedLessons = matchedLessons,
+            query = query
+        )
+    }
+
+    // Public database triggers to avoid layout thread leaks
     fun deleteCourse(courseId: String) {
         viewModelScope.launch {
-            repository.deleteCourseCascade(courseId)
-            if (_activeCourseId.value == courseId) {
-                _activeCourseId.value = null
+            repository.deleteCourse(courseId)
+        }
+    }
+
+    fun deleteAllCourses() {
+        viewModelScope.launch {
+            repository.deleteAllCourses()
+        }
+    }
+
+    fun saveTimestampNoteForLesson(lessonId: String, note: String) {
+        viewModelScope.launch {
+            val current = repository.getLessonById(lessonId)
+            if (current != null) {
+                repository.insertLessons(listOf(current.copy(notePath = note)))
+                // Trigger flow refresh
+                selectedLessonId.value = lessonId
             }
         }
     }
 
-    fun saveProgress(lessonId: String, courseId: String, positionMs: Long, completed: Boolean, speed: Float) {
-        viewModelScope.launch {
-            repository.saveProgress(
-                PlaybackProgress(
-                    lessonId = lessonId,
-                    courseId = courseId,
-                    currentPosition = positionMs,
-                    completed = completed,
-                    playbackSpeed = speed,
-                    lastWatched = System.currentTimeMillis()
-                )
-            )
+    override fun onCleared() {
+        // Releasing ExoPlayer safely on ViewModel clear to prevent heavy memory leaks
+        _exoPlayer?.let { player ->
+            player.stop()
+            player.release()
         }
-    }
-
-    fun addBookmark(courseId: String, lessonId: String, lessonTitle: String, timestampMs: Long) {
-        viewModelScope.launch {
-            repository.addBookmark(
-                Bookmark(
-                    courseId = courseId,
-                    lessonId = lessonId,
-                    lessonTitle = lessonTitle,
-                    timestamp = timestampMs
-                )
-            )
-        }
-    }
-
-    fun removeBookmark(bookmarkId: Int) {
-        viewModelScope.launch {
-            repository.deleteBookmark(bookmarkId)
-        }
-    }
-
-    fun updateTheme(themeStr: String) {
-        viewModelScope.launch {
-            val current = settings.value
-            repository.updateSettings(current.copy(theme = themeStr))
-        }
-    }
-
-    fun updateAutoplay(enabled: Boolean) {
-        viewModelScope.launch {
-            val current = settings.value
-            repository.updateSettings(current.copy(autoplay = enabled))
-        }
-    }
-
-    fun updateDefaultPlaybackSpeed(speed: Float) {
-        viewModelScope.launch {
-            val current = settings.value
-            repository.updateSettings(current.copy(defaultSpeed = speed))
-        }
-    }
-
-    fun updateAnimationsEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            val current = settings.value
-            repository.updateSettings(current.copy(animationsEnabled = enabled))
-        }
-    }
-
-    fun getProgressForCourse(courseId: String): Flow<Map<String, PlaybackProgress>> {
-        return repository.getProgressForCourse(courseId)
-    }
-
-    fun getProgressForLesson(lessonId: String): Flow<PlaybackProgress?> {
-        return repository.getProgressForLesson(lessonId)
+        _exoPlayer = null
+        super.onCleared()
     }
 }
+
+// Immutable state-safe holder for results query
+data class SearchResultsData(
+    val matchedCourses: List<CourseEntity> = emptyList(),
+    val matchedLessons: List<LessonEntity> = emptyList(),
+    val query: String = ""
+)
