@@ -24,6 +24,9 @@ jobs:
     - name: Regenerate Gradle Wrapper
       run: gradle wrapper
 
+    - name: Restore Debug Keystore
+      run: base64 --decode debug.keystore.base64 > debug.keystore
+
     - name: Grant Execute Permission to Gradlew
       run: chmod +x gradlew
 
