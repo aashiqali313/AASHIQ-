@@ -128,7 +128,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun playLessonVideo(lesson: LessonEntity) {
         val player = exoPlayer ?: return
         viewModelScope.launch(Dispatchers.Main) {
-            val mediaItemBuilder = MediaItem.Builder().setUri(lesson.videoUri)
+            val videoUri = lesson.videoUri
+            val mediaItemBuilder = MediaItem.Builder().setUri(videoUri)
+            if (videoUri.endsWith(".aashiq", ignoreCase = true)) {
+                // Force progressive MP4 media source config for custom file extension
+                mediaItemBuilder.setMimeType(MimeTypes.VIDEO_MP4)
+            }
             
             if (!lesson.subtitleUri.isNullOrEmpty()) {
                 try {

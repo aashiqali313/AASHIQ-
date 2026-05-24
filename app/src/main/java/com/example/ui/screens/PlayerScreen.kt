@@ -244,17 +244,23 @@ fun PlayerScreen(
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onDoubleTap = { offset ->
-                                    val player = viewModel.exoPlayer ?: return@detectTapGestures
-                                    val isLeft = offset.x < size.width * 0.4f
-                                    val seekAmount = if (isLeft) -10000 else 10000
-                                    player.seekTo((player.currentPosition + seekAmount).coerceIn(0, player.duration))
-                                    currentPosition = player.currentPosition
-                                    
-                                    gestureIndicatorText = if (isLeft) "⏪ REWIND 10S" else "FORWARD 10S ⏩"
-                                    coroutineScope.launch {
-                                        showGestureIndicator = true
-                                        delay(800)
-                                        showGestureIndicator = false
+                                    try {
+                                        val player = viewModel.exoPlayer ?: return@detectTapGestures
+                                        val isLeft = offset.x < size.width * 0.4f
+                                        val seekAmount = if (isLeft) -10000 else 10000
+                                        val duration = if (player.duration > 0) player.duration else 0L
+                                        val targetPosition = (player.currentPosition + seekAmount).coerceIn(0, duration)
+                                        player.seekTo(targetPosition)
+                                        currentPosition = player.currentPosition
+                                        
+                                        gestureIndicatorText = if (isLeft) "⏪ REWIND 10S" else "FORWARD 10S ⏩"
+                                        coroutineScope.launch {
+                                            showGestureIndicator = true
+                                            delay(800)
+                                            showGestureIndicator = false
+                                        }
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
                                     }
                                 },
                                 onTap = {
@@ -933,16 +939,22 @@ fun FullscreenPlayerView(
                 .pointerInput(Unit) {
                     detectTapGestures(
                         onDoubleTap = { offset ->
-                            val player = viewModel.exoPlayer ?: return@detectTapGestures
-                            val isLeft = offset.x < size.width * 0.4f
-                            val seekAmount = if (isLeft) -10000 else 10000
-                            player.seekTo((player.currentPosition + seekAmount).coerceIn(0, player.duration))
-                            
-                            gestureIndicatorText = if (isLeft) "⏪ REWIND 10S" else "FORWARD 10S ⏩"
-                            coroutineScope.launch {
-                                showGestureIndicator = true
-                                delay(800)
-                                showGestureIndicator = false
+                            try {
+                                val player = viewModel.exoPlayer ?: return@detectTapGestures
+                                val isLeft = offset.x < size.width * 0.4f
+                                val seekAmount = if (isLeft) -10000 else 10000
+                                val duration = if (player.duration > 0) player.duration else 0L
+                                val targetPosition = (player.currentPosition + seekAmount).coerceIn(0, duration)
+                                player.seekTo(targetPosition)
+                                
+                                gestureIndicatorText = if (isLeft) "⏪ REWIND 10S" else "FORWARD 10S ⏩"
+                                coroutineScope.launch {
+                                    showGestureIndicator = true
+                                    delay(800)
+                                    showGestureIndicator = false
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
                             }
                         },
                         onTap = {
