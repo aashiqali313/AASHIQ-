@@ -267,9 +267,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             (it.notePath != null && it.notePath.lowercase().contains(q))
         }
 
+        val courseIdToTitle = courses.associate { it.id to it.title }
+
         return SearchResultsData(
             matchedCourses = matchedCourses,
             matchedLessons = matchedLessons,
+            courseIdToTitle = courseIdToTitle,
             query = query
         )
     }
@@ -284,17 +287,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteAllCourses() {
         viewModelScope.launch {
             repository.deleteAllCourses()
-        }
-    }
-
-    fun saveTimestampNoteForLesson(lessonId: String, note: String) {
-        viewModelScope.launch {
-            val current = repository.getLessonById(lessonId)
-            if (current != null) {
-                repository.insertLessons(listOf(current.copy(notePath = note)))
-                // Trigger flow refresh
-                selectedLessonId.value = lessonId
-            }
         }
     }
 
@@ -319,5 +311,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 data class SearchResultsData(
     val matchedCourses: List<CourseEntity> = emptyList(),
     val matchedLessons: List<LessonEntity> = emptyList(),
+    val courseIdToTitle: Map<String, String> = emptyMap(),
     val query: String = ""
 )

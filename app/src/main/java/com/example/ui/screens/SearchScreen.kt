@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
@@ -42,6 +43,8 @@ fun SearchScreen(
     val query by viewModel.searchQuery.collectAsState()
     val searchResults by viewModel.searchResults.collectAsState()
     val recentSearches by viewModel.recentSearches.collectAsState()
+    
+    var selectedFilter by remember { mutableStateOf("All") }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -49,7 +52,13 @@ fun SearchScreen(
         topBar = {
             SearchTopBar(
                 query = query,
-                onQueryChange = { viewModel.searchQuery.value = it },
+                onQueryChange = { 
+                    viewModel.searchQuery.value = it 
+                    // Reset filter back to All when query empty to prevent dead states
+                    if (it.isBlank()) {
+                        selectedFilter = "All"
+                    }
+                },
                 onSearchSubmit = { viewModel.searchTriggered(it) },
                 onBack = onNavigateBack
             )
@@ -100,6 +109,49 @@ fun SearchScreen(
                 // Search onboarding tutorial instructions
                 SearchOnboardingVisual()
             } else {
+                // Elegant horizontal in-place filter chips (All, Courses, Lectures, Notes)
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val filters = listOf("All", "Courses", "Lectures", "Notes")
+                    items(filters) { filter ->
+                        SearchFilterChip(
+                            text = filter.uppercase(),
+                            selected = selectedFilter == filter,
+                            onClick = { selectedFilter = filter }
+                        )
+                    }
+                }
+
+                val matchedCourses = searchResults.matchedCourses
+                val matchedLessons = searchResults.matchedLessons
+                val courseIdToTitle = searchResults.courseIdToTitle
+
+                // Apply in-memory filtering based on selected search filter
+                val filteredCourses = remember(matchedCourses, selectedFilter) {
+                    if (selectedFilter == "All" || selectedFilter == "Courses") {
+                        matchedCourses
+                    } else {
+                        emptyList()
+                    }
+                }
+
+                val filteredLessons = remember(matchedLessons, selectedFilter) {
+                    when (selectedFilter) {
+                        "All" -> matchedLessons
+                        "Lectures" -> matchedLessons.filter { it.type == "video" }
+                        "Notes" -> matchedLessons.filter { it.type != "video" }
+                        else -> emptyList()
+                    }
+                }
+
+                // Group the matched lessons by courseId for clear structured representation
+                val groupedLessons = remember(filteredLessons) {
+                    filteredLessons.groupBy { it.courseId }
+                }
+
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
@@ -108,9 +160,10 @@ fun SearchScreen(
                 ) {
                     // Header counts matching
                     item {
-                        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        val totalResults = filteredCourses.size + filteredLessons.size
+                        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
                             Text(
-                                text = "MATCHES FOUND FOR \"${query.uppercase()}\"",
+                                text = "FOUND $totalResults MATCHES FOR \"${query.uppercase()}\"",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = PremiumGold,
                                 fontWeight = FontWeight.Bold,
@@ -119,22 +172,20 @@ fun SearchScreen(
                         }
                     }
 
-                    val matchedCourses = searchResults.matchedCourses
-                    val matchedLessons = searchResults.matchedLessons
-
-                    if (matchedCourses.isEmpty() && matchedLessons.isEmpty()) {
+                    if (filteredCourses.isEmpty() && filteredLessons.isEmpty()) {
                         item {
                             EmptySearchResultFeedback(query = query)
                         }
                     } else {
                         // Section: Courses
-                        if (matchedCourses.isNotEmpty()) {
+                        if (filteredCourses.isNotEmpty()) {
                             item {
-                                SectionSubHeader(title = "INDEXED MASTERCLASSES (${matchedCourses.size})")
+                                SectionSubHeader(title = "INDEXED MASTERCLASSES (${filteredCourses.size})")
                             }
-                            items(matchedCourses, key = { it.id }) { course ->
+                            items(filteredCourses, key = { it.id }) { course ->
                                 SearchCourseResultCard(
                                     course = course,
+                                    query = query,
                                     onSelect = {
                                         focusManager.clearFocus()
                                         viewModel.selectedCourseId.value = course.id
@@ -144,22 +195,68 @@ fun SearchScreen(
                             }
                         }
 
-                        // Section: Lessons / Notes / Modules
-                        if (matchedLessons.isNotEmpty()) {
+                        // Section: Lessons / Notes grouped by Course Name
+                        if (groupedLessons.isNotEmpty()) {
                             item {
-                                SectionSubHeader(title = "LECTURES & NOTES FOUND (${matchedLessons.size})")
+                                val sectionHeaderTitle = when (selectedFilter) {
+                                    "Lectures" -> "LECTURES BY COURSE (${filteredLessons.size})"
+                                    "Notes" -> "LEARNING NOTES BY COURSE (${filteredLessons.size})"
+                                    else -> "LECTURES & NOTES BY COURSE (${filteredLessons.size})"
+                                }
+                                SectionSubHeader(title = sectionHeaderTitle)
                             }
-                            items(matchedLessons, key = { it.id }) { lesson ->
-                                SearchLessonResultCard(
-                                    lesson = lesson,
-                                    query = query,
-                                    onSelect = {
-                                        focusManager.clearFocus()
-                                        viewModel.selectedCourseId.value = lesson.courseId
-                                        viewModel.selectedLessonId.value = lesson.id
-                                        onNavigateToPlayer(lesson.id)
+
+                            groupedLessons.forEach { (courseId, lessons) ->
+                                val courseTitle = courseIdToTitle[courseId] ?: "Independent Learning"
+                                
+                                // Group sub-header for this specific Course
+                                item {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                        shape = RoundedCornerShape(6.dp),
+                                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.FolderOpen,
+                                                contentDescription = null,
+                                                tint = PremiumGold,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = courseTitle.uppercase(),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = PremiumGold,
+                                                letterSpacing = 1.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
                                     }
-                                )
+                                }
+
+                                items(lessons, key = { it.id }) { lesson ->
+                                    val courseTitle = courseIdToTitle[lesson.courseId]
+                                    SearchLessonResultCard(
+                                        lesson = lesson,
+                                        courseTitle = courseTitle,
+                                        query = query,
+                                        onSelect = {
+                                            focusManager.clearFocus()
+                                            viewModel.selectedCourseId.value = lesson.courseId
+                                            viewModel.selectedLessonId.value = lesson.id
+                                            onNavigateToPlayer(lesson.id)
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -178,7 +275,7 @@ fun SearchTopBar(
 ) {
     Surface(
         color = MaterialTheme.colorScheme.background,
-        border = BorderStroke(0.5.dp, Color(0xFF222222)),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
@@ -189,7 +286,7 @@ fun SearchTopBar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
             }
             
             // Search Input Container
@@ -197,8 +294,8 @@ fun SearchTopBar(
                 modifier = Modifier
                     .weight(1f)
                     .height(44.dp)
-                    .background(Color(0xFF141414), RoundedCornerShape(8.dp))
-                    .border(0.5.dp, Color(0xFF333333), RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                    .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
                     .padding(horizontal = 12.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
@@ -218,8 +315,8 @@ fun SearchTopBar(
                             unfocusedContainerColor = Color.Transparent,
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                         ),
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium,
@@ -232,7 +329,7 @@ fun SearchTopBar(
 
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(24.dp)) {
-                            Icon(imageVector = Icons.Default.Close, contentDescription = "Clear", tint = Color.White, modifier = Modifier.size(14.dp))
+                            Icon(imageVector = Icons.Default.Close, contentDescription = "Clear", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
@@ -256,8 +353,8 @@ fun SectionSubHeader(title: String) {
 @Composable
 fun RecentChipItem(text: String, onSelect: (String) -> Unit, onDelete: (String) -> Unit) {
     Surface(
-        color = Color(0xFF121212),
-        border = BorderStroke(0.5.dp, Color(0xFF333333)),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
         shape = RoundedCornerShape(20.dp),
         modifier = Modifier.clickable { onSelect(text) }
     ) {
@@ -265,12 +362,12 @@ fun RecentChipItem(text: String, onSelect: (String) -> Unit, onDelete: (String) 
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = text, color = Color.White, fontSize = 11.sp)
+            Text(text = text, color = MaterialTheme.colorScheme.onSurface, fontSize = 11.sp)
             Spacer(modifier = Modifier.width(6.dp))
             Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = null,
-                tint = Color.Gray,
+                tint = SubduedGray,
                 modifier = Modifier
                     .size(12.dp)
                     .clickable { onDelete(text) }
@@ -280,10 +377,95 @@ fun RecentChipItem(text: String, onSelect: (String) -> Unit, onDelete: (String) 
 }
 
 @Composable
-fun SearchCourseResultCard(course: CourseEntity, onSelect: () -> Unit) {
+fun SearchFilterChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
     Surface(
-        color = Color(0xFF121212),
-        border = BorderStroke(0.5.dp, Color(0xFF222222)),
+        color = if (selected) PremiumGold.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        border = BorderStroke(
+            0.5.dp,
+            if (selected) PremiumGold else MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+        ),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Text(
+            text = text,
+            color = if (selected) PremiumGold else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        )
+    }
+}
+
+@Composable
+fun HighlightedText(
+    text: String,
+    query: String,
+    fontSize: androidx.compose.ui.unit.TextUnit,
+    fontWeight: FontWeight = FontWeight.Normal,
+    color: Color = MaterialTheme.colorScheme.onSurface,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
+    modifier: Modifier = Modifier
+) {
+    if (query.isBlank() || !text.lowercase().contains(query.lowercase())) {
+        Text(
+            text = text,
+            fontSize = fontSize,
+            fontWeight = fontWeight,
+            color = color,
+            maxLines = maxLines,
+            overflow = overflow,
+            modifier = modifier
+        )
+    } else {
+        val annotatedString = androidx.compose.ui.text.buildAnnotatedString {
+            val lowerText = text.lowercase()
+            val lowerQuery = query.trim().lowercase()
+            var startIdx = 0
+            while (startIdx < text.length) {
+                val matchIdx = lowerText.indexOf(lowerQuery, startIdx)
+                if (matchIdx == -1) {
+                    append(text.substring(startIdx))
+                    break
+                } else {
+                    if (matchIdx > startIdx) {
+                        append(text.substring(startIdx, matchIdx))
+                    }
+                    withStyle(
+                        style = androidx.compose.ui.text.SpanStyle(
+                            color = PremiumGold,
+                            fontWeight = FontWeight.ExtraBold,
+                            background = PremiumGold.copy(alpha = 0.15f)
+                        )
+                    ) {
+                        append(text.substring(matchIdx, matchIdx + lowerQuery.length))
+                    }
+                    startIdx = matchIdx + lowerQuery.length
+                }
+            }
+        }
+        Text(
+            text = annotatedString,
+            fontSize = fontSize,
+            fontWeight = fontWeight,
+            color = color,
+            maxLines = maxLines,
+            overflow = overflow,
+            modifier = modifier
+        )
+    }
+}
+
+@Composable
+fun SearchCourseResultCard(course: CourseEntity, query: String, onSelect: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
         shape = RoundedCornerShape(8.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -297,7 +479,13 @@ fun SearchCourseResultCard(course: CourseEntity, onSelect: () -> Unit) {
             Icon(imageVector = Icons.Default.VideoLibrary, contentDescription = null, tint = PremiumGold, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(14.dp))
             Column {
-                Text(text = course.title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                HighlightedText(
+                    text = course.title,
+                    query = query,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
                 Text(text = "Course Module Collection • ${course.category}", fontSize = 10.sp, color = SubduedGray)
             }
         }
@@ -305,12 +493,17 @@ fun SearchCourseResultCard(course: CourseEntity, onSelect: () -> Unit) {
 }
 
 @Composable
-fun SearchLessonResultCard(lesson: LessonEntity, query: String, onSelect: () -> Unit) {
+fun SearchLessonResultCard(
+    lesson: LessonEntity,
+    courseTitle: String?,
+    query: String,
+    onSelect: () -> Unit
+) {
     val notesContainQuery = lesson.notePath?.lowercase()?.contains(query.lowercase()) == true
 
     Surface(
-        color = Color(0xFF121212),
-        border = BorderStroke(0.5.dp, Color(0xFF222222)),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
         shape = RoundedCornerShape(8.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -318,43 +511,115 @@ fun SearchLessonResultCard(lesson: LessonEntity, query: String, onSelect: () -> 
             .clickable { onSelect() }
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(18.dp)
-                        .background(if (notesContainQuery) Color(0xFF2E240D) else Color(0xFF1F1F1F), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (notesContainQuery) Icons.Default.Description else Icons.Default.PlayCircle,
-                        contentDescription = null,
-                        tint = PremiumGold,
-                        modifier = Modifier.size(10.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .background(if (notesContainQuery) PremiumGold.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (notesContainQuery) Icons.Default.Description else Icons.Default.PlayCircle,
+                            contentDescription = null,
+                            tint = PremiumGold,
+                            modifier = Modifier.size(11.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (notesContainQuery) "NOTE MATCH" else "LECTURE VIDEO",
+                        fontSize = 8.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        color = PremiumGold,
+                        letterSpacing = 1.sp
                     )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (notesContainQuery) "NOTE MATCH" else "LECTURE VIDEO",
-                    fontSize = 8.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    color = PremiumGold,
-                    letterSpacing = 1.sp
-                )
+
+                // Show a gorgeous, highly visible Course Badge at the top of the card
+                if (!courseTitle.isNullOrEmpty()) {
+                    Surface(
+                        color = PremiumGold.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(4.dp),
+                        border = BorderStroke(0.5.dp, PremiumGold.copy(alpha = 0.3f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Folder,
+                                contentDescription = null,
+                                tint = PremiumGold,
+                                modifier = Modifier.size(10.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = courseTitle.uppercase(),
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = PremiumGold
+                            )
+                        }
+                    }
+                }
             }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text = lesson.title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Spacer(modifier = Modifier.height(6.dp))
+            
+            // Highlighted Lesson Title
+            HighlightedText(
+                text = lesson.title,
+                query = query,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            // Direct Course Name identification to completely eliminate user confusion
+            if (!courseTitle.isNullOrEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 1.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Folder,
+                        contentDescription = "In Course",
+                        tint = SubduedGray,
+                        modifier = Modifier.size(11.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "From Course: ",
+                        color = SubduedGray,
+                        fontSize = 11.sp
+                    )
+                    Text(
+                        text = courseTitle,
+                        color = PremiumGold,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
             
             if (notesContainQuery) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 val rawNote = lesson.notePath ?: ""
                 val snippetIndex = rawNote.lowercase().indexOf(query.lowercase())
                 val start = (snippetIndex - 20).coerceAtLeast(0)
                 val end = (snippetIndex + 40).coerceAtMost(rawNote.length)
                 val snippet = "..." + rawNote.substring(start, end).replace("\n", " ") + "..."
 
-                Text(
+                // Highlight match in notes snippet
+                HighlightedText(
                     text = snippet,
+                    query = query,
                     fontSize = 11.sp,
                     color = SubduedGray,
                     maxLines = 1,
@@ -374,13 +639,13 @@ fun SearchOnboardingVisual() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(imageVector = Icons.Default.SavedSearch, contentDescription = null, tint = Color(0xFF222222), modifier = Modifier.size(72.dp))
+        Icon(imageVector = Icons.Default.SavedSearch, contentDescription = null, tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), modifier = Modifier.size(72.dp))
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "Index Query Engine Live",
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = MaterialTheme.colorScheme.onBackground
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
@@ -407,7 +672,7 @@ fun EmptySearchResultFeedback(query: String) {
             text = "Zero Matches Isolated",
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = MaterialTheme.colorScheme.onBackground
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(

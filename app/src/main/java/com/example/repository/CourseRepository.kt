@@ -169,11 +169,10 @@ class CourseRepository(private val database: AppDatabase) {
                             
                             3. **VFX Lighting Matches**
                                When matching digital assets with real-world plates, match the color temperature, direction of shadow diffusion, and camera noise pattern exactly.
-                            
-                            *Tip:* Select any timestamp inside your media player HUD to save custom notes instantaneously!
                         """.trimIndent(),
                         durationSeconds = 734L,
-                        orderIndex = 1
+                        orderIndex = 1,
+                        type = "video"
                     ),
                     LessonEntity(
                         id = "les_cine_2",
@@ -184,14 +183,76 @@ class CourseRepository(private val database: AppDatabase) {
                         notePath = """
                             # Post Production Color Science
                             
-                            Learn how colors evoke powerful sub-conscious emotional triggers:
+                            In cinematic storytelling, color science is not decorative—it is a physiological coordinate system designed to guide sub-conscious emotional response.
                             
-                            * **Teal & Orange Contrast**: The cinematic gold standard for separating skin tones from ambient backgrounds.
-                            * **LUT Interpolation**: Understating mathematical look-up tables in 3D-space.
-                            * **OLED Black Levels**: Crafting extreme low-mid contrast tones for matte black screen panels.
+                            :::info
+                            Colors translate directly into cerebral triggers, manipulating ambient tension, focus hierarchy and psychological safety index.
+                            :::
+                            
+                            ## 1. Advanced Cinematic Color Grading Tech
+                            
+                            | Spectrum Accent | Emotional Valence | Target Narrative Environment |
+                            | |-- | |-- |
+                            | Gold Teal Contrast | Immersion, Safety | Modern Blockbuster Action Sequences |
+                            | Emerald Slate | Paranoia, Isolation | Suspenseful Sci-Fi Thriller Plates |
+                            | Rich Warm Amber | Nostalgia, Melancholic | Period Biopic Retrospectives |
+                            
+                            :::comparison
+                            [SDR BASE REC. 709 GRID] | [HDR WIDE COLOR COLUMNS]
+                            Linear Rec.709 colors with standard 8-bit dynamic depth levels where dark channels merge. | Extended BT.2020 color gamut with 10-bit dark sub-levels delivering ultra deep luminance.
+                            :::
+                            
+                            :::flashcard
+                            Front: LUT Interpolation 3D
+                            Back: A mathematical matrix mapping a 10-bit color channel into custom stylistic color spaces.
+                            :::
+                            
+                            ## 2. Dynamic Performance Quiz
+                            
+                            :::quiz
+                            Question: Why is Teal and Orange the industry standard color pairing?
+                            A) Because they are easiest to render in digital post-production.
+                            B) Because human skin tones sit in the warm orange spectrum, and its complementary color is cool contrast teal.
+                            C) It is a legacy analog tape layout constraint.
+                            Answer: B
+                            Explanation: Orange skin tones contrasted against complementary blue-teal backgrounds maximizes skin tone focus and separation.
+                            :::
+                            
+                            ## 3. Post Production Safety Directives
+                            
+                            :::expandable Pro Editing Secret Checklist
+                            - [ ] Calibrate grading monitor to Rec.2020.
+                            - [ ] Enforce Matte Black low contrast ceilings.
+                            - [ ] Apply fine grain analog noise in active 4K composite plates.
+                            :::
                         """.trimIndent(),
                         durationSeconds = 653L,
-                        orderIndex = 2
+                        orderIndex = 2,
+                        type = "mixed_media"
+                    ),
+                    LessonEntity(
+                        id = "les_cine_3",
+                        moduleId = "mod_cine_2",
+                        courseId = "course_cinematography",
+                        title = "HDR Cine Grading Standards Handbook",
+                        videoUri = "",
+                        notePath = "Cinematographer's reference manual for HDR mastering protocols, color gamut spaces, and Rec.2020 calibrating schemas.",
+                        durationSeconds = 0L,
+                        orderIndex = 3,
+                        type = "pdf",
+                        pdfUri = "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+                    ),
+                    LessonEntity(
+                        id = "les_cine_4",
+                        moduleId = "mod_cine_2",
+                        courseId = "course_cinematography",
+                        title = "Visual Scene Moodboards & Layouts",
+                        videoUri = "",
+                        notePath = "A curated database of cinematic layout design inspirations, framing examples, color pairings, and creative references.",
+                        durationSeconds = 0L,
+                        orderIndex = 4,
+                        type = "gallery",
+                        galleryImagesJson = """["https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?q=80&w=640","https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=640","https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=640"]"""
                     )
                 )
                 lessonDao.insertLessons(lessonsCine)
@@ -222,26 +283,65 @@ class CourseRepository(private val database: AppDatabase) {
                             * **Use LazyLists Correctly**: Always supply unique, stable `key` identifiers to lazy items so recompositions are surgically targeted.
                         """.trimIndent(),
                         durationSeconds = 596L,
-                        orderIndex = 1
+                        orderIndex = 1,
+                        type = "quick_note"
                     ),
                     LessonEntity(
                         id = "les_comp_2",
                         moduleId = "mod_comp_2",
                         courseId = "course_jetpack_compose",
                         title = "Crafting Matte-Glass Acrylic Overlays",
-                        videoUri = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+                        videoUri = "",
                         notePath = """
-                            # Glassmorphism & Matte Black Synthesis
-                            
-                            To implement a gorgeous luxury dark visual, stack:
-                            
-                            1. **Gradient Background Layer**: Use radial gradient brush.
-                            2. **Semi-transparent Card Cover**: Fill custom card colors with Alpha level `0.5f` charcoal or matte black.
-                            3. **Glow Border Outline**: 1dp wide border stroke containing a subtle gold-to-transparent brush.
-                            4. **Lightweight Overlay**: Add a delicate blur layer if device resources are high-performance.
+                            {
+                              "title": "Aesthetic Matte-Glass Overlays",
+                              "category": "Jetpack Compose Luxury Mechanics",
+                              "sections": [
+                                {
+                                  "type": "text",
+                                  "content": "To implement high-end visual glassmorphism inside a luxury dark application, stack overlapping drawing canvas layers together."
+                                },
+                                {
+                                  "type": "callout",
+                                  "style": "tip",
+                                  "content": "Always use edge-to-edge drawing for premium immersive experiences."
+                                },
+                                {
+                                  "type": "columns",
+                                  "columns": [
+                                    "**Gradient Foundation Layer**\nBuild radial or sweeping gradient brushes using custom drawing scopes inside `drawBehind` modifiers.",
+                                    "**Selective Acrylic Blur**\nStack a semi-transparent card cover with Alpha parameter set of `0.15f` to `0.35f` to let underlying shadows dissolve beautifully."
+                                  ]
+                                },
+                                {
+                                  "type": "comparison",
+                                  "left_header": "STANDARD CARD STATS",
+                                  "right_header": "MATTE-GLASS SHEETS",
+                                  "left_text": "Solid flat charcoal background with simple gray outline borders.",
+                                  "right_text": "Radial color gradients, semi-translucence card surface layers, and custom thin gold borders."
+                                },
+                                {
+                                  "type": "quiz",
+                                  "question": "Which Compose modifier best supports custom radial drawing on background canvases without creating redundant recomposition states?",
+                                  "options": [
+                                    "Modifier.background()",
+                                    "Modifier.drawBehind()",
+                                    "Modifier.paint()"
+                                  ],
+                                  "answer_index": 1,
+                                  "explanation": "Modifier.drawBehind allows you to draw directly onto the canvas, bypassing layout measurements entirely for massive render optimization."
+                                },
+                                {
+                                  "type": "expandable",
+                                  "title": "Under-the-Hood Compositing Directives",
+                                  "content": "To deliver silk-like 120Hz glass effects on low-power devices, avoid active run-time blurred captures. Instead, approximate with premium static gradient pre-renders and light vector grain layers."
+                                }
+                              ]
+                            }
                         """.trimIndent(),
-                        durationSeconds = 848L,
-                        orderIndex = 2
+                        durationSeconds = 0L,
+                        orderIndex = 2,
+                        type = "article"
                     )
                 )
                 lessonDao.insertLessons(lessonsCompose)
@@ -279,14 +379,10 @@ class CourseRepository(private val database: AppDatabase) {
                 return@withContext false
             }
 
-            // Group contents: if directories, they are modules. If solitary videos, map to default module.
+            // Group contents: if directories, they are modules. If solitary videos/files, map to default module.
             val directories = files.filter { it.isDirectory }
-            val videoFilesRoot = files.filter { isVideoFile(it.name ?: "") }
-            
             val modulesToInsert = mutableListOf<ModuleEntity>()
             val lessonsToInsert = mutableListOf<LessonEntity>()
-
-            var orderCounter = 1
 
             if (directories.isNotEmpty()) {
                 // Multi-module course structure
@@ -296,65 +392,18 @@ class CourseRepository(private val database: AppDatabase) {
                     modulesToInsert.add(ModuleEntity(moduleId, courseId, moduleTitle, dirIndex + 1))
 
                     val modFiles = dir.listFiles()
-                    var lessonIndex = 1
-                    
-                    // Parse video files in module folder
-                    val modVideos = modFiles.filter { isVideoFile(it.name ?: "") }.sortedBy { it.name }
-                    modVideos.forEach { file ->
-                        val lessonTitle = file.name?.substringBeforeLast(".") ?: "Lesson $lessonIndex"
-                        val lessonId = "les_${moduleId}_${UUID.randomUUID().toString().take(6)}"
-
-                        // Try finding notes of same name (.md or .txt)
-                        val noteContent = findCorrespondingNoteText(resolver, modFiles, file.name)
-                        val subtitleUri = findCorrespondingSubtitleUri(modFiles, file.name)
-                        val pdfUri = findCorrespondingPdfUri(modFiles, file.name)
-
-                        lessonsToInsert.add(
-                            LessonEntity(
-                                id = lessonId,
-                                moduleId = moduleId,
-                                courseId = courseId,
-                                title = lessonTitle,
-                                videoUri = file.uri.toString(),
-                                notePath = noteContent ?: "## $lessonTitle\nEnjoy this offline cinematic video lesson natively on AASHIQ+.",
-                                durationSeconds = 300L, // Placeholder, dynamically read where supported
-                                orderIndex = lessonIndex,
-                                subtitleUri = subtitleUri,
-                                pdfUri = pdfUri
-                            )
-                        )
-                        lessonIndex++
-                    }
+                    val addedLessons = parseDirectoryFiles(resolver, modFiles, moduleId, courseId)
+                    lessonsToInsert.addAll(addedLessons)
                 }
-            } else if (videoFilesRoot.isNotEmpty()) {
+            } else {
                 // Single-module course structure
                 val defaultModuleId = "mod_${courseId}_default"
                 modulesToInsert.add(ModuleEntity(defaultModuleId, courseId, "General Lectures", 1))
+                val addedLessons = parseDirectoryFiles(resolver, files, defaultModuleId, courseId)
+                lessonsToInsert.addAll(addedLessons)
+            }
 
-                videoFilesRoot.forEachIndexed { videoIndex, file ->
-                    val lessonTitle = file.name?.substringBeforeLast(".") ?: "Lecture ${videoIndex + 1}"
-                    val lessonId = "les_${defaultModuleId}_${videoIndex + 1}"
-                    val noteContent = findCorrespondingNoteText(resolver, files, file.name)
-                    val subtitleUri = findCorrespondingSubtitleUri(files, file.name)
-                    val pdfUri = findCorrespondingPdfUri(files, file.name)
-
-                    lessonsToInsert.add(
-                        LessonEntity(
-                            id = lessonId,
-                            moduleId = defaultModuleId,
-                            courseId = courseId,
-                            title = lessonTitle,
-                            videoUri = file.uri.toString(),
-                            notePath = noteContent ?: "## $lessonTitle\nPremium offline lecture notes.",
-                            durationSeconds = 300L,
-                            orderIndex = videoIndex + 1,
-                            subtitleUri = subtitleUri,
-                            pdfUri = pdfUri
-                        )
-                    )
-                }
-            } else {
-                // No video files found in selection
+            if (lessonsToInsert.isEmpty()) {
                 return@withContext false
             }
 
@@ -432,7 +481,7 @@ class CourseRepository(private val database: AppDatabase) {
         val noteFile = files.find {
             val name = it.name ?: ""
             name.substringBeforeLast(".") == baseName && 
-            (name.endsWith(".md") || name.endsWith(".txt"))
+            (name.endsWith(".md") || name.endsWith(".txt") || name.endsWith(".html") || name.endsWith(".aashiqnote") || name.endsWith(".json"))
         }
 
         return noteFile?.let { file ->
@@ -446,5 +495,121 @@ class CourseRepository(private val database: AppDatabase) {
                 null
             }
         }
+    }
+
+    private fun parseDirectoryFiles(
+        resolver: ContentResolver,
+        files: Array<DocumentFile>,
+        moduleId: String,
+        courseId: String
+    ): List<LessonEntity> {
+        val lessons = mutableListOf<LessonEntity>()
+        val processedNames = mutableSetOf<String>() // Keep track of base names that are associated with a video
+
+        val videoFiles = files.filter { isVideoFile(it.name ?: "") }.sortedBy { it.name }
+        var index = 1
+
+        // 1. Parse Video lessons first
+        videoFiles.forEach { file ->
+            val filename = file.name ?: ""
+            val baseName = filename.substringBeforeLast(".")
+            processedNames.add(baseName)
+
+            val lessonTitle = baseName
+            val lessonId = "les_${moduleId}_${UUID.randomUUID().toString().take(6)}"
+            val noteContent = findCorrespondingNoteText(resolver, files, filename)
+            val subtitleUri = findCorrespondingSubtitleUri(files, filename)
+            val pdfUri = findCorrespondingPdfUri(files, filename)
+
+            val type = if (noteContent?.trim()?.startsWith("{") == true && noteContent.trim().endsWith("}")) {
+                "mixed_media"
+            } else {
+                "video"
+            }
+
+            lessons.add(
+                LessonEntity(
+                    id = lessonId,
+                    moduleId = moduleId,
+                    courseId = courseId,
+                    title = lessonTitle,
+                    videoUri = file.uri.toString(),
+                    notePath = noteContent ?: "## $lessonTitle\nEnjoy this offline cinematic video lesson natively on AASHIQ+.",
+                    durationSeconds = 300L,
+                    orderIndex = index++,
+                    subtitleUri = subtitleUri,
+                    pdfUri = pdfUri,
+                    type = type
+                )
+            )
+        }
+
+        // 2. Parse standalone PDF files as standalone PDF lessons
+        val pdfFiles = files.filter { (it.name ?: "").endsWith(".pdf") }
+        pdfFiles.forEach { file ->
+            val filename = file.name ?: ""
+            val baseName = filename.substringBeforeLast(".")
+            if (baseName !in processedNames) {
+                // Standalone PDF!
+                val lessonId = "les_${moduleId}_pdf_${UUID.randomUUID().toString().take(6)}"
+                lessons.add(
+                    LessonEntity(
+                        id = lessonId,
+                        moduleId = moduleId,
+                        courseId = courseId,
+                        title = baseName,
+                        videoUri = "",
+                        notePath = "PDF handbook: $baseName. Access documentation directly inside AASHIQ+.",
+                        durationSeconds = 0L,
+                        orderIndex = index++,
+                        pdfUri = file.uri.toString(),
+                        type = "pdf"
+                    )
+                )
+            }
+        }
+
+        // 3. Parse standalone markdown/html/txt files as Article lessons
+        val noteFiles = files.filter {
+            val name = it.name ?: ""
+            name.endsWith(".md") || name.endsWith(".txt") || name.endsWith(".html") || name.endsWith(".aashiqnote") || name.endsWith(".json")
+        }
+        noteFiles.forEach { file ->
+            val filename = file.name ?: ""
+            val baseName = filename.substringBeforeLast(".")
+            if (baseName !in processedNames) {
+                // Standalone Article/Note!
+                val content = try {
+                    resolver.openInputStream(file.uri)?.use { stream ->
+                        BufferedReader(InputStreamReader(stream)).use { reader ->
+                            reader.readText()
+                        }
+                    }
+                } catch (e: Exception) {
+                    null
+                }
+
+                val finalContent = content ?: "Premium study material: $baseName."
+                val isJson = finalContent.trim().startsWith("{") && finalContent.trim().endsWith("}")
+                val type = if (isJson) "article" else if (finalContent.length < 500) "quick_note" else "article"
+
+                val lessonId = "les_${moduleId}_art_${UUID.randomUUID().toString().take(6)}"
+                lessons.add(
+                    LessonEntity(
+                        id = lessonId,
+                        moduleId = moduleId,
+                        courseId = courseId,
+                        title = baseName,
+                        videoUri = "",
+                        notePath = finalContent,
+                        durationSeconds = 0L,
+                        orderIndex = index++,
+                        type = type
+                    )
+                )
+            }
+        }
+
+        return lessons
     }
 }

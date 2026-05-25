@@ -253,142 +253,244 @@ fun PlayerScreen(
                 }
             }
 
-            // 1. CINEMATIC VIDEO PLAYER WINDOW WITH GESTURE HUD OVERLAY
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(210.dp)
-                    .background(Color.Black)
-            ) {
-                // ExoPlayer core binding
-                AndroidView(
-                    factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            player = viewModel.exoPlayer
-                            useController = false // Custom gold HUD implemented in Compose
-                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-
-                // Immersive Gesture overlay (Double tap seek, slide volume)
+            if (activeLesson.videoUri.isNotEmpty()) {
+                // 1. CINEMATIC VIDEO PLAYER WINDOW WITH GESTURE HUD OVERLAY
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onDoubleTap = { offset ->
-                                    try {
-                                        val player = viewModel.exoPlayer ?: return@detectTapGestures
-                                        val isLeft = offset.x < size.width * 0.4f
-                                        val seekAmount = if (isLeft) -10000 else 10000
-                                        val duration = if (player.duration > 0) player.duration else 0L
-                                        val targetPosition = (player.currentPosition + seekAmount).coerceIn(0, duration)
-                                        player.seekTo(targetPosition)
-                                        currentPosition = player.currentPosition
-                                        
-                                        gestureIndicatorText = if (isLeft) "⏪ REWIND 10S" else "FORWARD 10S ⏩"
-                                        coroutineScope.launch {
-                                            showGestureIndicator = true
-                                            delay(800)
-                                            showGestureIndicator = false
-                                        }
-                                    } catch (e: Exception) {
-                                        e.printStackTrace()
-                                    }
-                                },
-                                onTap = {
-                                    val player = viewModel.exoPlayer ?: return@detectTapGestures
-                                    if (player.isPlaying) {
-                                        player.pause()
-                                        isPlaying = false
-                                    } else {
-                                        player.play()
-                                        isPlaying = true
-                                    }
-                                }
-                            )
-                        }
-                )
+                        .fillMaxWidth()
+                        .height(210.dp)
+                        .background(Color.Black)
+                ) {
+                    // ExoPlayer core binding
+                    AndroidView(
+                        factory = { ctx ->
+                            PlayerView(ctx).apply {
+                                player = viewModel.exoPlayer
+                                useController = false // Custom gold HUD implemented in Compose
+                                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
 
-                // SUBTITLE OVERLAY PANEL (srt simulation matching settings)
-                if (subtitlesActive) {
+                    // Immersive Gesture overlay (Double tap seek, slide volume)
                     Box(
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 20.dp)
-                            .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .fillMaxSize()
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onDoubleTap = { offset ->
+                                        try {
+                                            val player = viewModel.exoPlayer ?: return@detectTapGestures
+                                            val isLeft = offset.x < size.width * 0.4f
+                                            val seekAmount = if (isLeft) -10000 else 10000
+                                            val duration = if (player.duration > 0) player.duration else 0L
+                                            val targetPosition = (player.currentPosition + seekAmount).coerceIn(0, duration)
+                                            player.seekTo(targetPosition)
+                                            currentPosition = player.currentPosition
+                                            
+                                            gestureIndicatorText = if (isLeft) "⏪ REWIND 10S" else "FORWARD 10S ⏩"
+                                            coroutineScope.launch {
+                                                showGestureIndicator = true
+                                                delay(800)
+                                                showGestureIndicator = false
+                                            }
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                        }
+                                    },
+                                    onTap = {
+                                        val player = viewModel.exoPlayer ?: return@detectTapGestures
+                                        if (player.isPlaying) {
+                                            player.pause()
+                                            isPlaying = false
+                                        } else {
+                                            player.play()
+                                            isPlaying = true
+                                        }
+                                    }
+                                )
+                            }
+                    )
+
+                    // SUBTITLE OVERLAY PANEL (srt simulation matching settings)
+                    if (subtitlesActive) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 20.dp)
+                                .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "[Cinematic audio playing - " + formatTime(currentPosition) + "]",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    // Temporary gesture feedback indicator (volume/seeking bounds)
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = showGestureIndicator,
+                        enter = fadeIn() + scaleIn(),
+                        exit = fadeOut() + scaleOut(),
+                        modifier = Modifier.align(Alignment.Center)
                     ) {
-                        Text(
-                            text = "[Cinematic audio playing - " + formatTime(currentPosition) + "]",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = TranslucentBlack),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text(
+                                text = gestureIndicatorText,
+                                color = PremiumGold,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                            )
+                        }
                     }
                 }
 
-                // Temporary gesture feedback indicator (volume/seeking bounds)
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = showGestureIndicator,
-                    enter = fadeIn() + scaleIn(),
-                    exit = fadeOut() + scaleOut(),
-                    modifier = Modifier.align(Alignment.Center)
-                ) {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = TranslucentBlack),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text(
-                            text = gestureIndicatorText,
-                            color = PremiumGold,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                // 2. GOLD MINIMAL PLAYER PROGRESS AND CONTROLS
+                PlayerToolbarOverlay(
+                    isPlaying = isPlaying,
+                    currentPos = currentPosition,
+                    totalDur = totalDuration,
+                    speed = playbackSpeed,
+                    subtitlesActive = subtitlesActive,
+                    onPlayPauseToggle = {
+                        val player = viewModel.exoPlayer ?: return@PlayerToolbarOverlay
+                        if (player.isPlaying) {
+                            player.pause()
+                            isPlaying = false
+                        } else {
+                            player.play()
+                            isPlaying = true
+                        }
+                    },
+                    onSeek = { ratio ->
+                        val player = viewModel.exoPlayer ?: return@PlayerToolbarOverlay
+                        val target = (ratio * totalDuration).toLong()
+                        player.seekTo(target)
+                        currentPosition = target
+                    },
+                    onSpeedChanged = {
+                        playbackSpeed = it
+                        viewModel.exoPlayer?.setPlaybackSpeed(it)
+                    },
+                    onSubtitleToggle = { subtitlesActive = !subtitlesActive },
+                    onFullscreenToggle = { isFullscreen = true }
+                )
+            } else {
+                // 1. PREMIUM VISUAL HERO HEADERS FOR NON-VIDEO LEARNING ELEMENTS
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(240.dp)
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(Color(0xFF1E1708), Color(0xFF141414))
+                            )
                         )
+                        .padding(20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        val bigIcon = when (activeLesson.type) {
+                            "pdf" -> Icons.Default.Description
+                            "article" -> Icons.Default.Article
+                            "quick_note" -> Icons.Default.FlashOn
+                            "gallery" -> Icons.Default.PhotoLibrary
+                            else -> Icons.Default.MenuBook
+                        }
+                        
+                        val typeTitle = when (activeLesson.type) {
+                            "pdf" -> "PDF DIGITAL MANUAL"
+                            "article" -> "EDUCATIONAL READING LAB"
+                            "quick_note" -> "CORE HABITS & PROTOCOL"
+                            "gallery" -> "INSPIRATIONAL GALLERY"
+                            else -> "OFFLINE INTELLECT HANDBOOK"
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .size(50.dp)
+                                .background(PremiumGold.copy(alpha = 0.15f), CircleShape)
+                                .border(1.dp, PremiumGold.copy(alpha = 0.4f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = bigIcon,
+                                contentDescription = null,
+                                tint = PremiumGold,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(10.dp))
+                        
+                        Text(
+                            text = typeTitle,
+                            fontSize = 9.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = PremiumGold,
+                            letterSpacing = 2.sp
+                        )
+                        
+                        Spacer(modifier = Modifier.height(4.dp))
+                        
+                        Text(
+                            text = activeLesson.title,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        
+                        Spacer(modifier = Modifier.height(14.dp))
+                        
+                        // Action buttons
+                        if (activeLesson.type == "pdf") {
+                            Button(
+                                onClick = { activeTab = 2 },
+                                colors = ButtonDefaults.buttonColors(containerColor = PremiumGold, contentColor = Color.Black),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("OPEN HIGH-RES HANDBOOK", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Button(
+                                onClick = { activeTab = 0 },
+                                colors = ButtonDefaults.buttonColors(containerColor = PremiumGold, contentColor = Color.Black),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("READ LESSON WORKBOOK", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
-
-            // 2. GOLD MINIMAL PLAYER PROGRESS AND CONTROLS
-            PlayerToolbarOverlay(
-                isPlaying = isPlaying,
-                currentPos = currentPosition,
-                totalDur = totalDuration,
-                speed = playbackSpeed,
-                subtitlesActive = subtitlesActive,
-                onPlayPauseToggle = {
-                    val player = viewModel.exoPlayer ?: return@PlayerToolbarOverlay
-                    if (player.isPlaying) {
-                        player.pause()
-                        isPlaying = false
-                    } else {
-                        player.play()
-                        isPlaying = true
-                    }
-                },
-                onSeek = { ratio ->
-                    val player = viewModel.exoPlayer ?: return@PlayerToolbarOverlay
-                    val target = (ratio * totalDuration).toLong()
-                    player.seekTo(target)
-                    currentPosition = target
-                },
-                onSpeedChanged = {
-                    playbackSpeed = it
-                    viewModel.exoPlayer?.setPlaybackSpeed(it)
-                },
-                onSubtitleToggle = { subtitlesActive = !subtitlesActive },
-                onFullscreenToggle = { isFullscreen = true }
-            )
 
             // 3. EXPANDABLE tabs section (Learning notes | Course Index | PDF Reader)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0xFF111111)),
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 TabItem(title = "LECTURE NOTES", isActive = activeTab == 0, onClick = { activeTab = 0 })
@@ -400,19 +502,13 @@ fun PlayerScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .background(MatteBlack)
+                    .background(MaterialTheme.colorScheme.background)
             ) {
                 when (activeTab) {
                     0 -> NotesTabContent(
                         localNote = activeLesson.notePath ?: "## General Information\nEnjoy this high performance lecture.",
-                        currentTimeString = formatTime(currentPosition),
-                        onSaveTimestampNote = { note ->
-                            val timestampedLine = "\n\n* **Timestamp Saved [${formatTime(currentPosition)}]**: $note"
-                            customNoteText = ""
-                            noteSaveAlertVisible = true
-                            val updatedNote = (activeLesson.notePath ?: "") + timestampedLine
-                            viewModel.saveTimestampNoteForLesson(activeLesson.id, updatedNote)
-                        }
+                        onOpenPdf = { activeTab = 2 },
+                        onOpenLesson = { lessonId -> viewModel.selectedLessonId.value = lessonId }
                     )
                     1 -> LessonsTabContent(
                         lessons = lessons,
@@ -424,37 +520,6 @@ fun PlayerScreen(
                     2 -> PdfViewerMockContent(pdfUri = activeLesson.pdfUri)
                 }
 
-                if (noteSaveAlertVisible) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(16.dp)
-                            .background(Color(0xFF1E2818), RoundedCornerShape(8.dp))
-                            .border(0.5.dp, Color(0xFF81C784), RoundedCornerShape(8.dp))
-                            .fillMaxWidth()
-                            .padding(12.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "SUCCESS: Live timestamp note saved to local text cache!",
-                                color = Color(0xFF81C784),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "DISMISS",
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                modifier = Modifier.clickable { noteSaveAlertVisible = false }
-                            )
-                        }
-                    }
-                }
             }
         }
         }
@@ -634,109 +699,19 @@ fun RowScope.TabItem(title: String, isActive: Boolean, onClick: () -> Unit) {
 @Composable
 fun NotesTabContent(
     localNote: String,
-    currentTimeString: String,
-    onSaveTimestampNote: (String) -> Unit
+    onOpenPdf: (String) -> Unit = {},
+    onOpenLesson: (String) -> Unit = {}
 ) {
-    var rawText by remember { mutableStateOf("") }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Quick insert note card
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp)
-                .background(Color(0xFF111111), RoundedCornerShape(8.dp))
-                .border(0.5.dp, Color(0xFF292929), RoundedCornerShape(8.dp))
-                .padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextField(
-                value = rawText,
-                onValueChange = { rawText = it },
-                placeholder = { Text("Write custom timestamped learning note...", fontSize = 11.sp, color = SubduedGray) },
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White
-                ),
-                textStyle = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            TextButton(
-                onClick = {
-                    if (rawText.isNotBlank()) {
-                        onSaveTimestampNote(rawText)
-                        rawText = ""
-                    }
-                },
-                colors = ButtonDefaults.textButtonColors(contentColor = PremiumGold)
-            ) {
-                Text("SAVE AT $currentTimeString", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-
-        // Custom stylized simple Markdown viewer
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(bottom = 16.dp)
-        ) {
-            val lines = localNote.split("\n")
-            items(lines) { line ->
-                val lineTrimmed = line.trim()
-                when {
-                    lineTrimmed.startsWith("# ") -> {
-                        Text(
-                            text = lineTrimmed.removePrefix("# "),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = PremiumGold,
-                            fontWeight = FontWeight.ExtraBold,
-                            modifier = Modifier.padding(top = 14.dp, bottom = 6.dp)
-                        )
-                    }
-                    lineTrimmed.startsWith("## ") -> {
-                        Text(
-                            text = lineTrimmed.removePrefix("## "),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
-                        )
-                    }
-                    lineTrimmed.startsWith("* ") || lineTrimmed.startsWith("- ") -> {
-                        val text = if (lineTrimmed.startsWith("* ")) lineTrimmed.removePrefix("* ") else lineTrimmed.removePrefix("- ")
-                        Row(modifier = Modifier.padding(vertical = 2.dp, horizontal = 4.dp)) {
-                            Text(text = "•", color = PremiumGold, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 8.dp))
-                            Text(text = text, style = MaterialTheme.typography.bodyLarge, color = Color.White)
-                        }
-                    }
-                    lineTrimmed.startsWith("1. ") -> {
-                        Row(modifier = Modifier.padding(vertical = 2.dp, horizontal = 4.dp)) {
-                            Text(text = lineTrimmed.take(3), color = PremiumGold, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(end = 4.dp))
-                            Text(text = lineTrimmed.drop(3), style = MaterialTheme.typography.bodyLarge, color = Color.White)
-                        }
-                    }
-                    lineTrimmed.isNotBlank() -> {
-                        Text(
-                            text = lineTrimmed,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = SubduedGray,
-                            lineHeight = 20.sp,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
-                    }
-                    else -> {
-                        Spacer(modifier = Modifier.height(6.dp))
-                    }
-                }
-            }
-        }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(12.dp)
+    ) {
+        RichNotesRenderer(
+            noteContent = localNote,
+            onOpenPdf = onOpenPdf,
+            onOpenLesson = onOpenLesson
+        )
     }
 }
 
@@ -754,8 +729,8 @@ fun LessonsTabContent(
         items(lessons, key = { it.id }) { lesson ->
             val isActive = lesson.id == activeLessonId
             Surface(
-                color = if (isActive) Color(0xFF1E1C12) else Color(0xFF121212),
-                border = BorderStroke(1.dp, if (isActive) PremiumGold else Color(0xFF222222)),
+                color = if (isActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                border = BorderStroke(1.dp, if (isActive) PremiumGold else MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -768,7 +743,7 @@ fun LessonsTabContent(
                     Box(
                         modifier = Modifier
                             .size(24.dp)
-                            .background(if (isActive) PremiumGold else Color(0xFF222222), CircleShape),
+                            .background(if (isActive) PremiumGold else MaterialTheme.colorScheme.surfaceVariant, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -784,7 +759,7 @@ fun LessonsTabContent(
                             text = lesson.title,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isActive) PremiumGold else Color.White,
+                            color = if (isActive) PremiumGold else MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -829,8 +804,8 @@ fun PdfViewerMockContent(pdfUri: String?) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(210.dp)
-                .background(Color(0xFF141414), RoundedCornerShape(8.dp))
-                .border(0.5.dp, Color(0xFF2A2A2A), RoundedCornerShape(8.dp)),
+                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
+                .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -854,7 +829,7 @@ fun PdfViewerMockContent(pdfUri: String?) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = pdfName,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 16.dp),

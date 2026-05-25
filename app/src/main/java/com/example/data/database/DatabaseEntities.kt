@@ -39,7 +39,9 @@ data class LessonEntity(
     val playProgressPercent: Int = 0,
     val progressMs: Long = 0L,
     val subtitleUri: String? = null,
-    val pdfUri: String? = null
+    val pdfUri: String? = null,
+    val type: String = "video", // video, article, pdf, gallery, quick_note, mixed_media
+    val galleryImagesJson: String? = null // List of local or remote image URIs as JSON
 )
 
 @Entity(tableName = "playback_progress")

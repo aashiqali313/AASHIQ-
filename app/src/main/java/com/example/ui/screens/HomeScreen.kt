@@ -200,7 +200,7 @@ fun HomeTopBar(
 ) {
     Surface(
         color = MaterialTheme.colorScheme.background,
-        border = BorderStroke(0.5.dp, Color(0xFF222222)),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
         modifier = Modifier
             .fillMaxWidth()
             .shadow(elevation = 10.dp)
@@ -218,7 +218,7 @@ fun HomeTopBar(
                 Box(
                     modifier = Modifier
                         .size(34.dp)
-                        .background(Color(0xFF161616), RoundedCornerShape(17.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(17.dp))
                         .border(1.dp, PremiumGold, RoundedCornerShape(17.dp)),
                     contentAlignment = Alignment.Center
                 ) {
@@ -250,8 +250,8 @@ fun HomeTopBar(
                     onClick = onTriggerImport,
                     modifier = Modifier
                         .size(40.dp)
-                        .background(Color(0xFF141414), CircleShape)
-                        .border(0.5.dp, Color(0xFF333333), CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                        .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), CircleShape)
                         .testTag("home_import_button")
                 ) {
                     Icon(
@@ -267,14 +267,14 @@ fun HomeTopBar(
                     onClick = onNavigateToSearch,
                     modifier = Modifier
                         .size(40.dp)
-                        .background(Color(0xFF141414), CircleShape)
-                        .border(0.5.dp, Color(0xFF333333), CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                        .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), CircleShape)
                         .testTag("home_search_button")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = "Global Search",
-                        tint = Color.White,
+                        tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -284,13 +284,13 @@ fun HomeTopBar(
                     onClick = onNavigateToSettings,
                     modifier = Modifier
                         .size(40.dp)
-                        .background(Color(0xFF141414), CircleShape)
-                        .border(0.5.dp, Color(0xFF333333), CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                        .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,
                         contentDescription = "Settings",
-                        tint = Color.White,
+                        tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -305,7 +305,7 @@ fun ImportProgressOverlay(status: String, progress: Float) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
-            .background(Color(0xFF111111), RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp))
             .border(1.dp, PremiumGold.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
             .padding(16.dp)
     ) {
@@ -331,7 +331,7 @@ fun ImportProgressOverlay(status: String, progress: Float) {
             LinearProgressIndicator(
                 progress = progress,
                 color = PremiumGold,
-                trackColor = Color(0xFF222222),
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(4.dp)
@@ -375,8 +375,8 @@ fun CourseHeroCarousel(courses: List<CourseEntity>, onExploreCourse: (CourseEnti
             .padding(16.dp)
             .height(200.dp)
             .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, Color(0xFF333333), RoundedCornerShape(16.dp))
-            .background(Color(0xFF121212))
+            .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable { onExploreCourse(activeCourse) }
     ) {
         // Thumbnail Image
@@ -518,7 +518,7 @@ fun ContinueWatchingCard(lesson: LessonEntity, onPlayClick: () -> Unit) {
                 LinearProgressIndicator(
                     progress = lesson.playProgressPercent / 100f,
                     color = PremiumGold,
-                    trackColor = Color(0xFF292929),
+                    trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(3.dp)

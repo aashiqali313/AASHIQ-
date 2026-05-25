@@ -54,7 +54,7 @@ fun CourseDetailScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Unindex Course Library?", color = Color.White) },
+            title = { Text("Unindex Course Library?", color = MaterialTheme.colorScheme.onSurface) },
             text = { Text("This will erase custom bookmarks, watch progress, and indexed modules from local database space.", color = SubduedGray) },
             confirmButton = {
                 TextButton(
@@ -70,10 +70,10 @@ fun CourseDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("KEEP", color = Color.White)
+                    Text("KEEP", color = MaterialTheme.colorScheme.onSurface)
                 }
             },
-            containerColor = Color(0xFF141414),
+            containerColor = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(12.dp)
         )
     }
@@ -349,11 +349,11 @@ fun ModuleExpansionHeader(module: ModuleEntity, moduleIndex: Int) {
             Text(
                 text = module.title,
                 fontSize = 16.sp,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold
             )
-            Divider(
-                color = Color(0xFF222222),
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
                 thickness = 0.5.dp,
                 modifier = Modifier.padding(top = 8.dp)
             )
@@ -364,9 +364,9 @@ fun ModuleExpansionHeader(module: ModuleEntity, moduleIndex: Int) {
 @Composable
 fun LessonRowItem(lesson: LessonEntity, onLessonClick: () -> Unit) {
     Surface(
-        color = Color(0xFF111111),
+        color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(8.dp),
-        border = BorderStroke(0.5.dp, Color(0xFF252525)),
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onLessonClick() }
@@ -383,7 +383,7 @@ fun LessonRowItem(lesson: LessonEntity, onLessonClick: () -> Unit) {
                 modifier = Modifier
                     .size(32.dp)
                     .background(
-                        color = if (lesson.playProgressPercent >= 90) Color(0xFF1E2818) else Color(0xFF181818),
+                        color = if (lesson.playProgressPercent >= 90) Color(0xFF1E2818) else MaterialTheme.colorScheme.surfaceVariant,
                         shape = RoundedCornerShape(6.dp)
                     ),
                 contentAlignment = Alignment.Center
@@ -411,11 +411,48 @@ fun LessonRowItem(lesson: LessonEntity, onLessonClick: () -> Unit) {
             Column(
                 modifier = Modifier.weight(1f)
             ) {
+                // Badging system for diverse learning formats
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val icon = when (lesson.type) {
+                        "video" -> Icons.Default.PlayCircle
+                        "pdf" -> Icons.Default.Description
+                        "article" -> Icons.Default.Article
+                        "quick_note" -> Icons.Default.FlashOn
+                        "gallery" -> Icons.Default.PhotoLibrary
+                        else -> Icons.Default.MenuBook
+                    }
+                    val label = when (lesson.type) {
+                        "video" -> "VIDEO LECTURE"
+                        "pdf" -> "PDF HANDBOOK"
+                        "article" -> "ARTICLE"
+                        "quick_note" -> "CORE ROUTINE"
+                        "gallery" -> "IMAGE GALLERY"
+                        else -> "LESSON NOTES"
+                    }
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = PremiumGold,
+                        modifier = Modifier.size(11.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = label,
+                        fontSize = 8.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        color = PremiumGold,
+                        letterSpacing = 0.5.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
                 Text(
                     text = lesson.title,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -453,20 +490,24 @@ fun LessonRowItem(lesson: LessonEntity, onLessonClick: () -> Unit) {
                 }
             }
 
-            // Small play action icon
+            // Small play action icon adaptively
             Box(
                 modifier = Modifier
                     .size(30.dp)
-                    .background(Color(0xFF1E1E1E), CircleShape),
+                    .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Default.PlayArrow,
+                    imageVector = when (lesson.type) {
+                        "video" -> Icons.Default.PlayArrow
+                        "pdf" -> Icons.Default.OpenInNew
+                        else -> Icons.Default.ArrowForward
+                    },
                     contentDescription = null,
                     tint = PremiumGold,
                     modifier = Modifier
                         .size(14.dp)
-                        .padding(start = 1.dp)
+                        .padding(start = if (lesson.type == "video") 1.dp else 0.dp)
                 )
             }
         }
