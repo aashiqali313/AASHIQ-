@@ -441,7 +441,9 @@ class CourseRepository(private val database: AppDatabase) {
 
     private fun isVideoFile(filename: String): Boolean {
         val extension = filename.substringAfterLast(".").lowercase()
-        return extension in listOf("mp4", "mkv", "3gp", "webm", "avi", "mov", "aashiq")
+        // Strictly only allow the proprietary, encrypted .aashiq files for premium course packages!
+        // All traditional mp4, mkv, webm etc. are explicitly rejected to enforce app-exclusive playback.
+        return extension == "aashiq"
     }
 
     private fun isImageFile(filename: String): Boolean {

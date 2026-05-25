@@ -11,6 +11,8 @@ import androidx.media3.common.Player
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.example.data.database.*
 import com.example.repository.CourseRepository
 import kotlinx.coroutines.Dispatchers
@@ -104,9 +106,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // Shared ExoPlayer instance for performance-optimized instant video loading
     private var _exoPlayer: ExoPlayer? = null
     val exoPlayer: ExoPlayer?
+        @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
         get() {
             if (_exoPlayer == null) {
-                _exoPlayer = ExoPlayer.Builder(getApplication())
+                val context = getApplication<Application>()
+                val defaultDataSourceFactory = DefaultDataSource.Factory(context)
+                val customDataSourceFactory = androidx.media3.datasource.DataSource.Factory {
+                    val upstream = defaultDataSourceFactory.createDataSource()
+                    AashiqDecryptingDataSource(context, upstream)
+                }
+                val mediaSourceFactory = DefaultMediaSourceFactory(customDataSourceFactory)
+
+                _exoPlayer = ExoPlayer.Builder(context)
+                    .setMediaSourceFactory(mediaSourceFactory)
                     .setLooper(Looper.getMainLooper())
                     .setHandleAudioBecomingNoisy(true)
                     .build().apply {
@@ -129,6 +141,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val player = exoPlayer ?: return
         viewModelScope.launch(Dispatchers.Main) {
             val videoUri = lesson.videoUri
+            
+            // App-exclusive playback restriction: Local files must be .aashiq
+            val isLocal = videoUri.startsWith("content://") || videoUri.startsWith("file://")
+            if (isLocal && !videoUri.endsWith(".aashiq", ignoreCase = true)) {
+                player.stop()
+                android.widget.Toast.makeText(
+                    getApplication(),
+                    "ACCESS DENIED:\nTraditional unencrypted formats (MP4, MKV) are strictly refused. Only authenticated .aashiq course video volumes are allowed.",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+
             val mediaItemBuilder = MediaItem.Builder().setUri(videoUri)
             if (videoUri.endsWith(".aashiq", ignoreCase = true)) {
                 // Force progressive MP4 media source config for custom file extension
