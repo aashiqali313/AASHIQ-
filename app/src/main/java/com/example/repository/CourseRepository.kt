@@ -21,12 +21,42 @@ class CourseRepository(private val database: AppDatabase) {
     private val lessonDao = database.lessonDao()
     private val recentSearchDao = database.recentSearchDao()
     private val userSettingsDao = database.userSettingsDao()
+    private val userProfileDao = database.userProfileDao()
+    private val certificateDao = database.certificateDao()
 
     val allCourses: Flow<List<CourseEntity>> = courseDao.getAllCourses()
     val bookmarkedLessons: Flow<List<LessonEntity>> = lessonDao.getBookmarkedLessons()
     val continueWatching: Flow<List<LessonEntity>> = lessonDao.getContinueWatchingLessons()
     val recentSearches: Flow<List<RecentSearchEntity>> = recentSearchDao.getRecentSearches()
     val userSettings: Flow<UserSettingsEntity?> = userSettingsDao.getSettingsFlow()
+    val userProfile: Flow<UserProfileEntity?> = userProfileDao.getProfileFlow()
+    val allCertificates: Flow<List<CertificateEntity>> = certificateDao.getAllCertificates()
+
+    suspend fun getUserProfileDirect(): UserProfileEntity {
+        return withContext(Dispatchers.IO) {
+            userProfileDao.getProfileDirect() ?: UserProfileEntity().also {
+                userProfileDao.insertProfile(it)
+            }
+        }
+    }
+
+    suspend fun saveUserProfile(profile: UserProfileEntity) {
+        withContext(Dispatchers.IO) {
+            userProfileDao.insertProfile(profile)
+        }
+    }
+
+    suspend fun getCertificateByCourse(courseId: String): CertificateEntity? {
+        return withContext(Dispatchers.IO) {
+            certificateDao.getCertificateByCourse(courseId)
+        }
+    }
+
+    suspend fun insertCertificate(certificate: CertificateEntity) {
+        withContext(Dispatchers.IO) {
+            certificateDao.insertCertificate(certificate)
+        }
+    }
 
     suspend fun getCourseById(id: String): CourseEntity? = courseDao.getCourseById(id)
     

@@ -15,6 +15,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.example.data.database.*
 import com.example.repository.CourseRepository
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
@@ -31,6 +32,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val settingsState: StateFlow<UserSettingsEntity> = repository.userSettings
         .map { it ?: UserSettingsEntity() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserSettingsEntity())
+
+    // User profile and certificates states
+    val profileState: StateFlow<UserProfileEntity> = repository.userProfile
+        .map { it ?: UserProfileEntity() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserProfileEntity())
+
+    val certificatesState: StateFlow<List<CertificateEntity>> = repository.allCertificates
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // All available courses
     val coursesState: StateFlow<List<CourseEntity>> = repository.allCourses
@@ -225,6 +234,47 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 importStatus.value = "Import Complete!"
             }
+        }
+    }
+
+    fun updateProfile(name: String, age: Int, gender: String, totalWatchTimeMinutes: Long, currentStreak: Int) {
+        viewModelScope.launch {
+            val current = repository.getUserProfileDirect()
+            val updated = current.copy(
+                name = name,
+                age = age,
+                gender = gender,
+                totalWatchTimeMinutes = totalWatchTimeMinutes,
+                currentStreak = currentStreak,
+                lastActiveTimestamp = System.currentTimeMillis()
+            )
+            repository.saveUserProfile(updated)
+        }
+    }
+
+    fun incrementWatchTime(minutes: Long) {
+        viewModelScope.launch {
+            val current = repository.getUserProfileDirect()
+            repository.saveUserProfile(current.copy(totalWatchTimeMinutes = current.totalWatchTimeMinutes + minutes))
+        }
+    }
+
+    fun claimCertificate(courseId: String, courseName: String) {
+        viewModelScope.launch {
+            val profile = repository.getUserProfileDirect()
+            val cleanSignature = "AASHIQ_CERT_${UUID.randomUUID().toString().take(8).uppercase()}"
+            val certificate = CertificateEntity(
+                certificateId = "CERT-" + UUID.randomUUID().toString().take(6).uppercase(),
+                userName = profile.name,
+                courseId = courseId,
+                courseName = courseName,
+                completionDate = System.currentTimeMillis(),
+                hashSignature = cleanSignature
+            )
+            repository.insertCertificate(certificate)
+            
+            // Increment completed courses count in profile
+            repository.saveUserProfile(profile.copy(completedCoursesCount = profile.completedCoursesCount + 1))
         }
     }
 

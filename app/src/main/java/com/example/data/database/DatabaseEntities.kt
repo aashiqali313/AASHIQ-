@@ -72,3 +72,27 @@ data class UserSettingsEntity(
     val doubleTapSeekEnabled: Boolean = true,
     val animationIntensityMultiplier: Float = 1.0f
 )
+
+@Entity(tableName = "user_profile")
+data class UserProfileEntity(
+    @PrimaryKey val id: String = "main_user",
+    val name: String = "Aashiq Ali",
+    val age: Int = 22,
+    val gender: String = "Male",
+    val avatarUri: String = "",
+    val totalWatchTimeMinutes: Long = 120L,
+    val completedCoursesCount: Int = 1,
+    val currentStreak: Int = 5,
+    val lastActiveTimestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "certificates")
+data class CertificateEntity(
+    @PrimaryKey val certificateId: String,
+    val userName: String,
+    val courseId: String,
+    val courseName: String,
+    val completionDate: Long = System.currentTimeMillis(),
+    val hashSignature: String
+)
+

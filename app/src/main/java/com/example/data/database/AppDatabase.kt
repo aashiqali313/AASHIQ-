@@ -12,9 +12,11 @@ import androidx.room.RoomDatabase
         LessonEntity::class,
         PlaybackProgressEntity::class,
         RecentSearchEntity::class,
-        UserSettingsEntity::class
+        UserSettingsEntity::class,
+        UserProfileEntity::class,
+        CertificateEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -23,6 +25,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun lessonDao(): LessonDao
     abstract fun recentSearchDao(): RecentSearchDao
     abstract fun userSettingsDao(): UserSettingsDao
+    abstract fun userProfileDao(): UserProfileDao
+    abstract fun certificateDao(): CertificateDao
 
     companion object {
         @Volatile

@@ -98,3 +98,27 @@ interface UserSettingsDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSettings(settings: UserSettingsEntity)
 }
+
+@Dao
+interface UserProfileDao {
+    @Query("SELECT * FROM user_profile WHERE id = 'main_user' LIMIT 1")
+    fun getProfileFlow(): Flow<UserProfileEntity?>
+
+    @Query("SELECT * FROM user_profile WHERE id = 'main_user' LIMIT 1")
+    suspend fun getProfileDirect(): UserProfileEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertProfile(profile: UserProfileEntity)
+}
+
+@Dao
+interface CertificateDao {
+    @Query("SELECT * FROM certificates ORDER BY completionDate DESC")
+    fun getAllCertificates(): Flow<List<CertificateEntity>>
+
+    @Query("SELECT * FROM certificates WHERE courseId = :courseId LIMIT 1")
+    suspend fun getCertificateByCourse(courseId: String): CertificateEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCertificate(certificate: CertificateEntity)
+}
