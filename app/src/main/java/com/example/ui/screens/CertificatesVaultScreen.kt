@@ -96,7 +96,7 @@ fun CertificatesVaultScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.9f))
+                    .background(MaterialTheme.colorScheme.background)
                     .padding(vertical = 12.dp, horizontal = 16.dp),
                 contentAlignment = Alignment.Center
             ) {

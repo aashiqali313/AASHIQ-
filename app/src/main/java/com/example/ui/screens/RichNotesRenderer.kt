@@ -43,6 +43,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.request.CachePolicy
+import androidx.compose.ui.layout.ContentScale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -63,19 +68,20 @@ val ErrorRed = Color(0xFFCF6679)
 fun RichNotesRenderer(
     noteContent: String,
     onOpenPdf: (String) -> Unit = {},
-    onOpenLesson: (String) -> Unit = {}
+    onOpenLesson: (String) -> Unit = {},
+    isNested: Boolean = false
 ) {
-    val trimmed = noteContent.trim()
+    val trimmed = remember(noteContent) { noteContent.trim() }
     
     when {
         (trimmed.startsWith("<html") || trimmed.startsWith("<!DOCTYPE html")) -> {
             PremiumHtmlWebView(htmlContent = trimmed)
         }
         (trimmed.startsWith("{") && trimmed.endsWith("}")) -> {
-            JsonLessonBlockRenderer(jsonString = trimmed, onOpenPdf, onOpenLesson)
+            JsonLessonBlockRenderer(jsonString = trimmed, onOpenPdf, onOpenLesson, isNested)
         }
         else -> {
-            AashiqMarkdownRenderer(rawContent = trimmed, onOpenPdf, onOpenLesson)
+            AashiqMarkdownRenderer(rawContent = trimmed, onOpenPdf, onOpenLesson, isNested)
         }
     }
 }
@@ -221,147 +227,218 @@ fun PremiumHtmlWebView(htmlContent: String) {
 fun JsonLessonBlockRenderer(
     jsonString: String,
     onOpenPdf: (String) -> Unit,
-    onOpenLesson: (String) -> Unit
+    onOpenLesson: (String) -> Unit,
+    isNested: Boolean = false
 ) {
-    val items = remember(jsonString) {
-        val list = mutableListOf<JsonBlock>()
+    var items by remember(jsonString) { mutableStateOf<List<JsonBlock>>(emptyList()) }
+    var isParsing by remember(jsonString) { mutableStateOf(true) }
+    var parseError by remember(jsonString) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(jsonString) {
+        isParsing = true
+        parseError = null
         try {
-            val root = JSONObject(jsonString)
-            if (root.has("title")) {
-                list.add(JsonBlock.Header(
-                    title = root.getString("title"),
-                    category = root.optString("category", "Premium Lecture")
-                ))
+            val decoded = withContext(Dispatchers.IO) {
+                parseJsonBlocks(jsonString)
             }
-            val sections = root.optJSONArray("sections")
-            if (sections != null) {
-                for (i in 0 until sections.length()) {
-                    val sec = sections.getJSONObject(i)
-                    val type = sec.optString("type")
-                    val block = when (type) {
-                        "text" -> JsonBlock.TextMark(sec.getString("content"))
-                        "callout" -> JsonBlock.Callout(
-                            style = sec.optString("style", "info"),
-                            text = sec.getString("content")
-                        )
-                        "columns" -> {
-                            val array = sec.getJSONArray("columns")
-                            val colList = mutableListOf<String>()
-                            for (c in 0 until array.length()) {
-                                colList.add(array.getString(c))
-                            }
-                            JsonBlock.Columns(colList)
-                        }
-                        "comparison" -> JsonBlock.Comparison(
-                            beforeHeader = sec.optString("left_header", "BEFORE"),
-                            afterHeader = sec.optString("right_header", "AFTER"),
-                            beforeText = sec.getString("left_text"),
-                            afterText = sec.getString("right_text")
-                        )
-                        "quiz" -> JsonBlock.Quiz(
-                            question = sec.getString("question"),
-                            options = parseStringArray(sec.getJSONArray("options")),
-                            correctAnswerIndex = sec.getInt("answer_index"),
-                            explanation = sec.optString("explanation", "")
-                        )
-                        "flashcard" -> JsonBlock.Flashcard(
-                            front = sec.getString("front"),
-                            back = sec.getString("back")
-                        )
-                        "resource" -> JsonBlock.Resource(
-                            resType = sec.optString("resource_type", "PDF"),
-                            title = sec.getString("title"),
-                            uri = sec.getString("uri")
-                        )
-                        "checklist" -> {
-                            val array = sec.getJSONArray("items")
-                            val checkList = mutableListOf<String>()
-                            for (k in 0 until array.length()) {
-                                checkList.add(array.getString(k))
-                            }
-                            JsonBlock.Checklists(checkList)
-                        }
-                        "expandable" -> JsonBlock.Expandable(
-                            title = sec.getString("title"),
-                            content = sec.getString("content")
-                        )
-                        else -> null
-                    }
-                    if (block != null) {
-                        list.add(block)
-                    }
-                }
-            }
+            items = decoded
         } catch (e: Exception) {
-            list.add(JsonBlock.Callout("warning", "JSON Note Compile Exception: ${e.message}"))
-            list.add(JsonBlock.TextMark(jsonString))
+            parseError = e.localizedMessage ?: "Invalid structure specification."
+        } finally {
+            isParsing = false
         }
-        list
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        items(items) { block ->
-            when (block) {
-                is JsonBlock.Header -> {
-                    LessonHeroCard(title = block.title, category = block.category)
+    if (isParsing) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = PremiumGold, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("ANALYZING LECTURE DATA...", fontSize = 10.sp, color = PremiumGold, fontFamily = FontFamily.Monospace)
+            }
+        }
+    } else if (parseError != null) {
+        CalloutPanel(style = "warning", text = "JSON Compile Warning: $parseError")
+    } else {
+        if (isNested) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                items.forEach { block ->
+                    key(block.hashCode()) {
+                        RenderJsonBlock(block, onOpenPdf, onOpenLesson)
+                    }
                 }
-                is JsonBlock.TextMark -> {
-                    TextWithAnnotation(text = block.text)
-                }
-                is JsonBlock.Callout -> {
-                    CalloutPanel(style = block.style, text = block.text)
-                }
-                is JsonBlock.Columns -> {
-                    MultiColumnView(columns = block.cols)
-                }
-                is JsonBlock.Comparison -> {
-                    ComparisonCard(
-                        beforeHeader = block.beforeHeader,
-                        afterHeader = block.afterHeader,
-                        beforeText = block.beforeText,
-                        afterText = block.afterText
-                    )
-                }
-                is JsonBlock.Quiz -> {
-                    QuizCard(
-                        question = block.question,
-                        options = block.options,
-                        correctAnswerIndex = block.correctAnswerIndex,
-                        explanation = block.explanation
-                    )
-                }
-                is JsonBlock.Flashcard -> {
-                    FlashcardItem(front = block.front, back = block.back)
-                }
-                is JsonBlock.Resource -> {
-                    ResourceBox(
-                        type = block.resType,
-                        title = block.title,
-                        uri = block.uri,
-                        onOpen = { if (block.resType.lowercase().contains("pdf")) onOpenPdf(block.uri) else onOpenLesson(block.uri) }
-                    )
-                }
-                is JsonBlock.Checklists -> {
-                    ChecklistLayout(items = block.items)
-                }
-                is JsonBlock.Expandable -> {
-                    ExpandableCard(title = block.title, content = block.content)
+            }
+        } else {
+            val scrollState = rememberScrollState()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                items.forEach { block ->
+                    key(block.hashCode()) {
+                        RenderJsonBlock(block, onOpenPdf, onOpenLesson)
+                    }
                 }
             }
         }
     }
 }
 
+@Composable
+fun RenderJsonBlock(
+    block: JsonBlock,
+    onOpenPdf: (String) -> Unit,
+    onOpenLesson: (String) -> Unit
+) {
+    when (block) {
+        is JsonBlock.Header -> {
+            LessonHeroCard(title = block.title, category = block.category)
+        }
+        is JsonBlock.TextMark -> {
+            TextWithAnnotation(text = block.text)
+        }
+        is JsonBlock.Callout -> {
+            CalloutPanel(style = block.style, text = block.text)
+        }
+        is JsonBlock.Columns -> {
+            MultiColumnView(columns = block.cols)
+        }
+        is JsonBlock.Comparison -> {
+            ComparisonCard(
+                beforeHeader = block.beforeHeader,
+                afterHeader = block.afterHeader,
+                beforeText = block.beforeText,
+                afterText = block.afterText
+            )
+        }
+        is JsonBlock.Quiz -> {
+            QuizCard(
+                question = block.question,
+                options = block.options,
+                correctAnswerIndex = block.correctAnswerIndex,
+                explanation = block.explanation
+            )
+        }
+        is JsonBlock.Flashcard -> {
+            FlashcardItem(front = block.front, back = block.back)
+        }
+        is JsonBlock.Resource -> {
+            ResourceBox(
+                type = block.resType,
+                title = block.title,
+                uri = block.uri,
+                onOpen = { if (block.resType.lowercase().contains("pdf")) onOpenPdf(block.uri) else onOpenLesson(block.uri) }
+            )
+        }
+        is JsonBlock.Checklists -> {
+            ChecklistLayout(items = block.items)
+        }
+        is JsonBlock.Expandable -> {
+            ExpandableCard(title = block.title, content = block.content)
+        }
+    }
+}
+
+fun parseJsonBlocks(jsonString: String): List<JsonBlock> {
+    val list = mutableListOf<JsonBlock>()
+    try {
+        val root = JSONObject(jsonString)
+        if (root.has("title")) {
+            list.add(JsonBlock.Header(
+                title = root.optString("title", "Lecture Reference"),
+                category = root.optString("category", "Premium Lecture")
+            ))
+        }
+        val sections = root.optJSONArray("sections")
+        if (sections != null) {
+            for (i in 0 until sections.length()) {
+                val sec = sections.optJSONObject(i) ?: continue
+                val type = sec.optString("type", "")
+                val block = when (type) {
+                    "text" -> JsonBlock.TextMark(sec.optString("content", ""))
+                    "callout" -> JsonBlock.Callout(
+                        style = sec.optString("style", "info"),
+                        text = sec.optString("content", "")
+                    )
+                    "columns" -> {
+                        val array = sec.optJSONArray("columns")
+                        val colList = mutableListOf<String>()
+                        if (array != null) {
+                            for (c in 0 until array.length()) {
+                                colList.add(array.optString(c, ""))
+                            }
+                        }
+                        JsonBlock.Columns(colList)
+                    }
+                    "comparison" -> JsonBlock.Comparison(
+                        beforeHeader = sec.optString("left_header", "BEFORE"),
+                        afterHeader = sec.optString("right_header", "AFTER"),
+                        beforeText = sec.optString("left_text", ""),
+                        afterText = sec.optString("right_text", "")
+                    )
+                    "quiz" -> JsonBlock.Quiz(
+                        question = sec.optString("question", ""),
+                        options = sec.optJSONArray("options")?.let { parseStringArray(it) } ?: emptyList(),
+                        correctAnswerIndex = sec.optInt("answer_index", 0),
+                        explanation = sec.optString("explanation", "")
+                    )
+                    "flashcard" -> JsonBlock.Flashcard(
+                        front = sec.optString("front", ""),
+                        back = sec.optString("back", "")
+                    )
+                    "resource" -> JsonBlock.Resource(
+                        resType = sec.optString("resource_type", "PDF"),
+                        title = sec.optString("title", "Resource Document"),
+                        uri = sec.optString("uri", "")
+                    )
+                    "checklist" -> {
+                        val array = sec.optJSONArray("items")
+                        val checkList = mutableListOf<String>()
+                        if (array != null) {
+                            for (k in 0 until array.length()) {
+                                checkList.add(array.optString(k, ""))
+                            }
+                        }
+                        JsonBlock.Checklists(checkList)
+                    }
+                    "expandable" -> JsonBlock.Expandable(
+                        title = sec.optString("title", ""),
+                        content = sec.optString("content", "")
+                    )
+                    else -> null
+                }
+                if (block != null) {
+                    list.add(block)
+                }
+            }
+        }
+    } catch (e: Exception) {
+        list.add(JsonBlock.Callout("warning", "JSON Note Compile Exception: ${e.message}"))
+        list.add(JsonBlock.TextMark(jsonString))
+    }
+    return list
+}
+
 private fun parseStringArray(jsonArray: JSONArray): List<String> {
     val list = mutableListOf<String>()
     for (i in 0 until jsonArray.length()) {
-        list.add(jsonArray.getString(i))
+        val s = jsonArray.optString(i, null)
+        if (s != null) {
+            list.add(s)
+        }
     }
     return list
 }
@@ -388,92 +465,152 @@ sealed class JsonBlock {
 fun AashiqMarkdownRenderer(
     rawContent: String,
     onOpenPdf: (String) -> Unit,
-    onOpenLesson: (String) -> Unit
+    onOpenLesson: (String) -> Unit,
+    isNested: Boolean = false
 ) {
-    val blocks = remember(rawContent) {
-        parseAashiqMarkdown(rawContent)
+    var blocks by remember(rawContent) { mutableStateOf<List<MarkdownBlock>>(emptyList()) }
+    var isParsing by remember(rawContent) { mutableStateOf(true) }
+    var parseError by remember(rawContent) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(rawContent) {
+        isParsing = true
+        parseError = null
+        try {
+            val decoded = withContext(Dispatchers.IO) {
+                parseAashiqMarkdown(rawContent)
+            }
+            blocks = decoded
+        } catch (e: Exception) {
+            parseError = e.localizedMessage ?: "Failed to interpret manuscript blocks."
+        } finally {
+            isParsing = false
+        }
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(top = 16.dp, bottom = 48.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(blocks) { block ->
-            when (block) {
-                is MarkdownBlock.HeaderH1 -> {
-                    Text(
-                        text = block.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = PremiumGold,
-                        fontWeight = FontWeight.ExtraBold,
-                        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
-                    )
-                    HorizontalDivider(color = PremiumGold.copy(alpha = 0.2f), thickness = 1.dp)
-                }
-                is MarkdownBlock.HeaderH2 -> {
-                    Text(
-                        text = block.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
-                    )
-                }
-                is MarkdownBlock.RegularText -> {
-                    TextWithAnnotation(text = block.text)
-                }
-                is MarkdownBlock.MarkdownTable -> {
-                    MarkdownTableLayout(headers = block.headers, rows = block.rows)
-                }
-                is MarkdownBlock.AashiqCallout -> {
-                    CalloutPanel(style = block.style, text = block.content)
-                }
-                is MarkdownBlock.AashiqComparison -> {
-                    ComparisonCard(
-                        beforeHeader = block.leftHeader,
-                        afterHeader = block.rightHeader,
-                        beforeText = block.leftText,
-                        afterText = block.rightText
-                    )
-                }
-                is MarkdownBlock.AashiqQuiz -> {
-                    QuizCard(
-                        question = block.question,
-                        options = block.options,
-                        correctAnswerIndex = block.correctIndex,
-                        explanation = block.explanation
-                    )
-                }
-                is MarkdownBlock.AashiqFlashcard -> {
-                    FlashcardItem(front = block.front, back = block.recto)
-                }
-                is MarkdownBlock.AashiqColumns -> {
-                    MultiColumnView(columns = block.columns)
-                }
-                is MarkdownBlock.InlineChecklist -> {
-                    ChecklistLayout(items = block.items)
-                }
-                is MarkdownBlock.AashiqEmbedResource -> {
-                    ResourceBox(
-                        type = block.resType,
-                        title = block.title,
-                        uri = block.uri,
-                        onOpen = { if (block.resType.lowercase().contains("pdf")) onOpenPdf(block.uri) else onOpenLesson(block.uri) }
-                    )
-                }
-                is MarkdownBlock.AashiqExpandable -> {
-                    ExpandableCard(title = block.title, content = block.content)
-                }
-                is MarkdownBlock.InlineRenderImage -> {
-                    InlineImageView(url = block.imageUrl, caption = block.caption)
-                }
-                is MarkdownBlock.Quote -> {
-                    QuoteBox(text = block.text)
+    if (isParsing) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(color = PremiumGold, strokeWidth = 2.dp, modifier = Modifier.size(28.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("PARSING MANUSCRIPT TEXT...", fontSize = 10.sp, color = PremiumGold, fontFamily = FontFamily.Monospace)
+            }
+        }
+    } else if (parseError != null) {
+        CalloutPanel(style = "warning", text = "Parsing Exception: $parseError")
+    } else {
+        if (isNested) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                blocks.forEach { block ->
+                    key(block.hashCode()) {
+                        RenderMarkdownBlock(block, onOpenPdf, onOpenLesson)
+                    }
                 }
             }
+        } else {
+            val scrollState = rememberScrollState()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                blocks.forEach { block ->
+                    key(block.hashCode()) {
+                        RenderMarkdownBlock(block, onOpenPdf, onOpenLesson)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RenderMarkdownBlock(
+    block: MarkdownBlock,
+    onOpenPdf: (String) -> Unit,
+    onOpenLesson: (String) -> Unit
+) {
+    when (block) {
+        is MarkdownBlock.HeaderH1 -> {
+            Text(
+                text = block.title,
+                style = MaterialTheme.typography.titleLarge,
+                color = PremiumGold,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+            )
+            HorizontalDivider(color = PremiumGold.copy(alpha = 0.2f), thickness = 1.dp)
+        }
+        is MarkdownBlock.HeaderH2 -> {
+            Text(
+                text = block.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 12.dp, bottom = 2.dp)
+            )
+        }
+        is MarkdownBlock.RegularText -> {
+            TextWithAnnotation(text = block.text)
+        }
+        is MarkdownBlock.MarkdownTable -> {
+            MarkdownTableLayout(headers = block.headers, rows = block.rows)
+        }
+        is MarkdownBlock.AashiqCallout -> {
+            CalloutPanel(style = block.style, text = block.content)
+        }
+        is MarkdownBlock.AashiqComparison -> {
+            ComparisonCard(
+                beforeHeader = block.leftHeader,
+                afterHeader = block.rightHeader,
+                beforeText = block.leftText,
+                afterText = block.rightText
+            )
+        }
+        is MarkdownBlock.AashiqQuiz -> {
+            QuizCard(
+                question = block.question,
+                options = block.options,
+                correctAnswerIndex = block.correctIndex,
+                explanation = block.explanation
+            )
+        }
+        is MarkdownBlock.AashiqFlashcard -> {
+            FlashcardItem(front = block.front, back = block.recto)
+        }
+        is MarkdownBlock.AashiqColumns -> {
+            MultiColumnView(columns = block.columns)
+        }
+        is MarkdownBlock.InlineChecklist -> {
+            ChecklistLayout(items = block.items)
+        }
+        is MarkdownBlock.AashiqEmbedResource -> {
+            ResourceBox(
+                type = block.resType,
+                title = block.title,
+                uri = block.uri,
+                onOpen = { if (block.resType.lowercase().contains("pdf")) onOpenPdf(block.uri) else onOpenLesson(block.uri) }
+            )
+        }
+        is MarkdownBlock.AashiqExpandable -> {
+            ExpandableCard(title = block.title, content = block.content)
+        }
+        is MarkdownBlock.InlineRenderImage -> {
+            InlineImageView(url = block.imageUrl, caption = block.caption)
+        }
+        is MarkdownBlock.Quote -> {
+            QuoteBox(text = block.text)
         }
     }
 }
@@ -506,194 +643,221 @@ fun parseAashiqMarkdown(rawContent: String): List<MarkdownBlock> {
     val max = lines.size
     
     while (index < max) {
-        val line = lines[index]
-        val trimmed = line.trim()
-        
-        when {
-            trimmed.startsWith("### ") || trimmed.startsWith("## ") -> {
-                val clean = trimmed.substringAfter("#").trim()
-                blocks.add(MarkdownBlock.HeaderH2(clean))
+        try {
+            val line = lines[index]
+            val trimmed = line.trim()
+            if (trimmed.isEmpty()) {
                 index++
+                continue
             }
-            trimmed.startsWith("# ") -> {
-                val clean = trimmed.removePrefix("# ").trim()
-                blocks.add(MarkdownBlock.HeaderH1(clean))
-                index++
-            }
-            trimmed.startsWith("> ") -> {
-                val clean = trimmed.removePrefix("> ").trim()
-                blocks.add(MarkdownBlock.Quote(clean))
-                index++
-            }
-            // Parse custom syntax tags (e.g., :::comparison)
-            trimmed.startsWith(":::comparison") -> {
-                index++
-                var leftHeader = "BEFORE"
-                var rightHeader = "AFTER"
-                var leftText = ""
-                var rightText = ""
-                while (index < max && !lines[index].trim().startsWith(":::")) {
-                    val part = lines[index].trim()
-                    if (part.contains("|")) {
-                        val split = part.split("|")
-                        if (split.size == 2) {
-                            if (split[0].trim().startsWith("[") || leftText.isEmpty()) {
-                                leftHeader = split[0].trim().replace("[", "").replace("]", "")
-                                rightHeader = split[1].trim().replace("[", "").replace("]", "")
-                            } else {
-                                leftText += (if (leftText.isEmpty()) "" else "\n") + split[0].trim()
-                                rightText += (if (rightText.isEmpty()) "" else "\n") + split[1].trim()
+            
+            when {
+                trimmed.startsWith("### ") || trimmed.startsWith("## ") -> {
+                    val clean = trimmed.substringAfter("#").trim()
+                    blocks.add(MarkdownBlock.HeaderH2(clean))
+                    index++
+                }
+                trimmed.startsWith("# ") -> {
+                    val clean = trimmed.removePrefix("# ").trim()
+                    blocks.add(MarkdownBlock.HeaderH1(clean))
+                    index++
+                }
+                trimmed.startsWith("> ") -> {
+                    val clean = trimmed.removePrefix("> ").trim()
+                    blocks.add(MarkdownBlock.Quote(clean))
+                    index++
+                }
+                // Parse custom syntax tags (e.g., :::comparison)
+                trimmed.startsWith(":::comparison") -> {
+                    index++
+                    var leftHeader = "BEFORE"
+                    var rightHeader = "AFTER"
+                    var leftText = ""
+                    var rightText = ""
+                    while (index < max && !lines[index].trim().startsWith(":::")) {
+                        val part = lines[index].trim()
+                        if (part.contains("|")) {
+                            val split = part.split("|")
+                            if (split.size >= 2) {
+                                if (split[0].trim().startsWith("[") || leftText.isEmpty()) {
+                                    leftHeader = split[0].trim().replace("[", "").replace("]", "")
+                                    rightHeader = split[1].trim().replace("[", "").replace("]", "")
+                                } else {
+                                    leftText += (if (leftText.isEmpty()) "" else "\n") + split[0].trim()
+                                    rightText += (if (rightText.isEmpty()) "" else "\n") + split[1].trim()
+                                }
+                            }
+                        } else if (part.isNotBlank()) {
+                            leftText += (if (leftText.isEmpty()) "" else "\n") + part
+                        }
+                        index++
+                    }
+                    blocks.add(MarkdownBlock.AashiqComparison(leftHeader, rightHeader, leftText, rightText))
+                    if (index < max && lines[index].trim().startsWith(":::")) {
+                        index++ // skip closing :::
+                    }
+                }
+                trimmed.startsWith(":::quiz") -> {
+                    index++
+                    var question = ""
+                    val options = mutableListOf<String>()
+                    var answerIndex = 0
+                    var explanation = ""
+                    while (index < max && !lines[index].trim().startsWith(":::")) {
+                        val part = lines[index].trim()
+                        when {
+                            part.startsWith("Question:") -> question = part.substringAfter("Question:").trim()
+                            part.startsWith("Explanation:") -> explanation = part.substringAfter("Explanation:").trim()
+                            part.startsWith("Answer:") -> {
+                                val rawArg = part.substringAfter("Answer:").trim()
+                                val ch = rawArg.lowercase().firstOrNull()
+                                if (ch != null && ch in 'a'..'d') {
+                                    answerIndex = ch - 'a'
+                                } else {
+                                    answerIndex = rawArg.toIntOrNull() ?: 0
+                                }
+                            }
+                            part.isNotBlank() && (part.startsWith("A)") || part.startsWith("B)") || part.startsWith("C)") || part.startsWith("D)") || part.startsWith("- ")) -> {
+                                val cl = part.replace(Regex("^[A-D]\\)\\s*"), "").replace(Regex("^-\\s*"), "").trim()
+                                options.add(cl)
                             }
                         }
-                    } else if (part.isNotBlank()) {
-                        leftText += (if (leftText.isEmpty()) "" else "\n") + part
+                        index++
                     }
-                    index++
+                    blocks.add(MarkdownBlock.AashiqQuiz(question, options, answerIndex, explanation))
+                    if (index < max && lines[index].trim().startsWith(":::")) {
+                        index++
+                    }
                 }
-                blocks.add(MarkdownBlock.AashiqComparison(leftHeader, rightHeader, leftText, rightText))
-                index++ // skip closing :::
-            }
-            trimmed.startsWith(":::quiz") -> {
-                index++
-                var question = ""
-                val options = mutableListOf<String>()
-                var answerIndex = 0
-                var explanation = ""
-                while (index < max && !lines[index].trim().startsWith(":::")) {
-                    val part = lines[index].trim()
-                    when {
-                        part.startsWith("Question:") -> question = part.substringAfter("Question:").trim()
-                        part.startsWith("Explanation:") -> explanation = part.substringAfter("Explanation:").trim()
-                        part.startsWith("Answer:") -> {
-                            val rawArg = part.substringAfter("Answer:").trim()
-                            answerIndex = rawArg.lowercase().firstOrNull()?.minus('a') ?: 0
-                            if (answerIndex < 0 || answerIndex > 3) {
-                                answerIndex = rawArg.toIntOrNull() ?: 0
+                trimmed.startsWith(":::flashcard") -> {
+                    index++
+                    var front = ""
+                    var back = ""
+                    while (index < max && !lines[index].trim().startsWith(":::")) {
+                        val part = lines[index].trim()
+                        if (part.startsWith("Front:")) front = part.substringAfter("Front:").trim()
+                        if (part.startsWith("Back:")) back = part.substringAfter("Back:").trim()
+                        index++
+                    }
+                    blocks.add(MarkdownBlock.AashiqFlashcard(front, back))
+                    if (index < max && lines[index].trim().startsWith(":::")) {
+                        index++
+                    }
+                }
+                trimmed.startsWith(":::columns") -> {
+                    index++
+                    val colContents = mutableListOf<String>()
+                    var currentText = ""
+                    while (index < max && !lines[index].trim().startsWith(":::")) {
+                        val part = lines[index].trim()
+                        if (part.startsWith("[") && part.endsWith("]")) {
+                            if (currentText.isNotBlank()) {
+                                colContents.add(currentText.trim())
                             }
+                            currentText = ""
+                        } else {
+                            currentText += (if (currentText.isEmpty()) "" else "\n") + part
                         }
-                        part.isNotBlank() && (part.startsWith("A)") || part.startsWith("B)") || part.startsWith("C)") || part.startsWith("D)") || part.startsWith("- ")) -> {
-                            val cl = part.replace(Regex("^[A-D]\\)\\s*"), "").replace(Regex("^-\\s*"), "").trim()
-                            options.add(cl)
-                        }
+                        index++
+                    }
+                    if (currentText.isNotBlank()) {
+                        colContents.add(currentText.trim())
+                    }
+                    blocks.add(MarkdownBlock.AashiqColumns(colContents))
+                    if (index < max && lines[index].trim().startsWith(":::")) {
+                        index++
+                    }
+                }
+                trimmed.startsWith(":::resource") -> {
+                    index++
+                    var type = "PDF"
+                    var title = "Attachment"
+                    var uri = ""
+                    while (index < max && !lines[index].trim().startsWith(":::")) {
+                        val part = lines[index].trim()
+                        if (part.startsWith("Type:")) type = part.substringAfter("Type:").trim()
+                        if (part.startsWith("Title:")) title = part.substringAfter("Title:").trim()
+                        if (part.startsWith("Uri:")) uri = part.substringAfter("Uri:").trim()
+                        index++
+                    }
+                    blocks.add(MarkdownBlock.AashiqEmbedResource(type, title, uri))
+                    if (index < max && lines[index].trim().startsWith(":::")) {
+                        index++
+                    }
+                }
+                trimmed.startsWith(":::expandable") -> {
+                    val header = trimmed.removePrefix(":::expandable").trim()
+                    index++
+                    var innerText = ""
+                    while (index < max && !lines[index].trim().startsWith(":::")) {
+                        innerText += (if (innerText.isEmpty()) "" else "\n") + lines[index]
+                        index++
+                    }
+                    blocks.add(MarkdownBlock.AashiqExpandable(header, innerText))
+                    if (index < max && lines[index].trim().startsWith(":::")) {
+                        index++
+                    }
+                }
+                trimmed.startsWith(":::info") || trimmed.startsWith(":::warning") || trimmed.startsWith(":::tip") -> {
+                    val style = trimmed.removePrefix(":::").trim()
+                    index++
+                    var calloutText = ""
+                    while (index < max && !lines[index].trim().startsWith(":::")) {
+                        calloutText += (if (calloutText.isEmpty()) "" else "\n") + lines[index]
+                        index++
+                    }
+                    blocks.add(MarkdownBlock.AashiqCallout(style, calloutText))
+                    if (index < max && lines[index].trim().startsWith(":::")) {
+                        index++
+                    }
+                }
+                // Embed Render Inline Images (e.g. ![Caption](url))
+                trimmed.startsWith("![") -> {
+                    val caption = trimmed.substringAfter("[", "").substringBefore("]", "")
+                    val url = trimmed.substringAfter("(", "").substringBefore(")", "")
+                    if (url.isNotEmpty()) {
+                        blocks.add(MarkdownBlock.InlineRenderImage(url, caption))
                     }
                     index++
                 }
-                blocks.add(MarkdownBlock.AashiqQuiz(question, options, answerIndex, explanation))
-                index++
-            }
-            trimmed.startsWith(":::flashcard") -> {
-                index++
-                var front = ""
-                var back = ""
-                while (index < max && !lines[index].trim().startsWith(":::")) {
-                    val part = lines[index].trim()
-                    if (part.startsWith("Front:")) front = part.substringAfter("Front:").trim()
-                    if (part.startsWith("Back:")) back = part.substringAfter("Back:").trim()
-                    index++
+                // Checklists
+                (trimmed.startsWith("- [ ]") || trimmed.startsWith("- [x]") || trimmed.startsWith("- [X]")) -> {
+                    val chkList = mutableListOf<String>()
+                    while (index < max && (lines[index].trim().startsWith("- [ ]") || lines[index].trim().startsWith("- [x]") || lines[index].trim().startsWith("- [X]"))) {
+                        val item = lines[index].trim().substring(5).trim()
+                        chkList.add(item)
+                        index++
+                    }
+                    blocks.add(MarkdownBlock.InlineChecklist(chkList))
                 }
-                blocks.add(MarkdownBlock.AashiqFlashcard(front, back))
-                index++
-            }
-            trimmed.startsWith(":::columns") -> {
-                index++
-                val colContents = mutableListOf<String>()
-                var currentText = ""
-                while (index < max && !lines[index].trim().startsWith(":::")) {
-                    val part = lines[index].trim()
-                    if (part.startsWith("[") && part.endsWith("]")) {
-                        if (currentText.isNotBlank()) {
-                            colContents.add(currentText.trim())
+                // Markdown tables parsing
+                trimmed.startsWith("|") -> {
+                    val headers = trimmed.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+                    index++
+                    // Pass dash lines
+                    if (index < max && (lines[index].trim().startsWith("|--") || lines[index].trim().startsWith("|-"))) {
+                        index++
+                    }
+                    val rows = mutableListOf<List<String>>()
+                    while (index < max && lines[index].trim().startsWith("|")) {
+                        val cells = lines[index].trim().split("|").map { it.trim() }.filter { it.isNotEmpty() }
+                        if (cells.size >= headers.size) {
+                            rows.add(cells.take(headers.size))
                         }
-                        currentText = ""
-                    } else {
-                        currentText += (if (currentText.isEmpty()) "" else "\n") + part
+                        index++
+                    }
+                    blocks.add(MarkdownBlock.MarkdownTable(headers, rows))
+                }
+                else -> {
+                    if (trimmed.isNotBlank()) {
+                        blocks.add(MarkdownBlock.RegularText(trimmed))
                     }
                     index++
                 }
-                if (currentText.isNotBlank()) {
-                    colContents.add(currentText.trim())
-                }
-                blocks.add(MarkdownBlock.AashiqColumns(colContents))
-                index++
             }
-            trimmed.startsWith(":::resource") -> {
-                index++
-                var type = "PDF"
-                var title = "Attachment"
-                var uri = ""
-                while (index < max && !lines[index].trim().startsWith(":::")) {
-                    val part = lines[index].trim()
-                    if (part.startsWith("Type:")) type = part.substringAfter("Type:").trim()
-                    if (part.startsWith("Title:")) title = part.substringAfter("Title:").trim()
-                    if (part.startsWith("Uri:")) uri = part.substringAfter("Uri:").trim()
-                    index++
-                }
-                blocks.add(MarkdownBlock.AashiqEmbedResource(type, title, uri))
-                index++
-            }
-            trimmed.startsWith(":::expandable") -> {
-                val header = trimmed.removePrefix(":::expandable").trim()
-                index++
-                var innerText = ""
-                while (index < max && !lines[index].trim().startsWith(":::")) {
-                    innerText += (if (innerText.isEmpty()) "" else "\n") + lines[index]
-                    index++
-                }
-                blocks.add(MarkdownBlock.AashiqExpandable(header, innerText))
-                index++
-            }
-            trimmed.startsWith(":::info") || trimmed.startsWith(":::warning") || trimmed.startsWith(":::tip") -> {
-                val style = trimmed.removePrefix(":::").trim()
-                index++
-                var calloutText = ""
-                while (index < max && !lines[index].trim().startsWith(":::")) {
-                    calloutText += (if (calloutText.isEmpty()) "" else "\n") + lines[index]
-                    index++
-                }
-                blocks.add(MarkdownBlock.AashiqCallout(style, calloutText))
-                index++
-            }
-            // Embed Render Inline Images (e.g. ![Caption](url))
-            trimmed.startsWith("![") -> {
-                val caption = trimmed.substringAfter("[").substringBefore("]")
-                val url = trimmed.substringAfter("(").substringBefore(")")
-                blocks.add(MarkdownBlock.InlineRenderImage(url, caption))
-                index++
-            }
-            // Checklists
-            (trimmed.startsWith("- [ ]") || trimmed.startsWith("- [x]") || trimmed.startsWith("- [X]")) -> {
-                val chkList = mutableListOf<String>()
-                while (index < max && (lines[index].trim().startsWith("- [ ]") || lines[index].trim().startsWith("- [x]") || lines[index].trim().startsWith("- [X]"))) {
-                    val item = lines[index].trim().substring(5).trim()
-                    chkList.add(item)
-                    index++
-                }
-                blocks.add(MarkdownBlock.InlineChecklist(chkList))
-            }
-            // Markdown tables parsing
-            trimmed.startsWith("|") -> {
-                val headers = trimmed.split("|").map { it.trim() }.filter { it.isNotEmpty() }
-                index++
-                // Pass dash lines
-                if (index < max && lines[index].trim().startsWith("|--") || lines[index].trim().startsWith("|-")) {
-                    index++
-                }
-                val rows = mutableListOf<List<String>>()
-                while (index < max && lines[index].trim().startsWith("|")) {
-                    val cells = lines[index].trim().split("|").map { it.trim() }.filter { it.isNotEmpty() }
-                    if (cells.size >= headers.size) {
-                        rows.add(cells.take(headers.size))
-                    }
-                    index++
-                }
-                blocks.add(MarkdownBlock.MarkdownTable(headers, rows))
-            }
-            else -> {
-                if (trimmed.isNotBlank()) {
-                    blocks.add(MarkdownBlock.RegularText(trimmed))
-                }
-                index++
-            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            index++ // recovery step
         }
     }
     return blocks
@@ -1375,9 +1539,10 @@ fun InlineImageView(url: String, caption: String) {
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        AsyncImage(
+        SafePremiumAsyncImage(
             model = url,
             contentDescription = caption,
+            contentScale = ContentScale.FillWidth,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 200.dp)
@@ -1406,9 +1571,10 @@ fun InlineImageView(url: String, caption: String) {
                 modifier = Modifier.fillMaxSize()
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    AsyncImage(
+                    SafePremiumAsyncImage(
                         model = url,
                         contentDescription = caption,
+                        contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxSize()
                             .clickable { showDialog = false }
@@ -1434,6 +1600,78 @@ fun InlineImageView(url: String, caption: String) {
                         Icon(imageVector = Icons.Default.Close, contentDescription = "Close preview", tint = Color.White)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun SafePremiumAsyncImage(
+    model: String,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Fit
+) {
+    val context = LocalContext.current
+    var isError by remember { mutableStateOf(false) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    val imageRequest = remember(model) {
+        ImageRequest.Builder(context)
+            .data(model)
+            .crossfade(true)
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .build()
+    }
+
+    Box(
+        modifier = modifier.background(Color(0xFF141414)),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isError) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxSize().padding(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ErrorOutline,
+                    contentDescription = null,
+                    tint = ErrorRed.copy(alpha = 0.5f),
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "IMAGE UNAVAILABLE",
+                    fontSize = 9.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    color = ErrorRed.copy(alpha = 0.5f)
+                )
+            }
+        } else {
+            AsyncImage(
+                model = imageRequest,
+                contentDescription = contentDescription,
+                contentScale = contentScale,
+                modifier = Modifier.fillMaxSize(),
+                onError = {
+                    isError = true
+                    isLoading = false
+                },
+                onSuccess = {
+                    isError = false
+                    isLoading = false
+                }
+            )
+
+            if (isLoading) {
+                CircularProgressIndicator(
+                    color = PremiumGold.copy(alpha = 0.5f),
+                    strokeWidth = 1.5.dp,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }

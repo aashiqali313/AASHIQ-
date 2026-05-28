@@ -6,11 +6,13 @@ import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
@@ -24,6 +26,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -96,9 +99,9 @@ fun InAppPdfViewer(
                 errorMessage = "Source PDF file clean-path could not be verified offline."
                 isLoading = false
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             e.printStackTrace()
-            errorMessage = "Failed to render PDF: ${e.localizedMessage}"
+            errorMessage = "Failed to render PDF: ${e.localizedMessage ?: "Resource allocation flaw"}"
             isLoading = false
         }
 
@@ -190,30 +193,69 @@ fun InAppPdfViewer(
 
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { pageCount })
 
+    // Page caching to avoid flickering/re-rendering on page swipe
+    val bitmapCache = remember(pdfRendererState) {
+        object : java.util.LinkedHashMap<Int, Bitmap>(6, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, Bitmap>?): Boolean {
+                return size > 6
+            }
+        }
+    }
+
+    var controlsVisible by remember { mutableStateOf(true) }
+
     LaunchedEffect(pagerState.currentPage, pageCount) {
         if (pageCount > 0) {
             onPageChanged?.invoke(pagerState.currentPage + 1, pageCount)
         }
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = Color.Black,
-        topBar = {
-            Box(
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+        ) { pageIndex ->
+            PdfPageItem(
+                renderer = pdfRendererState!!,
+                pageIndex = pageIndex,
+                bitmapCache = bitmapCache,
+                onToggleControls = { controlsVisible = !controlsVisible }
+            )
+        }
+
+        // Animated overlay for Floating Top Bar (AMOLED viewer chrome)
+        AnimatedVisibility(
+            visible = controlsVisible,
+            enter = fadeIn() + slideInVertically(initialOffsetY = { -it }),
+            exit = fadeOut() + slideOutVertically(targetOffsetY = { -it }),
+            modifier = Modifier.align(Alignment.TopCenter)
+        ) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.85f)),
+                shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
+                border = BorderStroke(1.dp, PremiumGold.copy(alpha = 0.35f)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.Black)
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .statusBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .shadow(16.dp, RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp))
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     IconButton(
                         onClick = onClose,
-                        modifier = Modifier.background(Graphite, CircleShape)
+                        modifier = Modifier.background(Color.White.copy(alpha = 0.08f), CircleShape)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -225,20 +267,19 @@ fun InAppPdfViewer(
                     Text(
                         text = title.uppercase(),
                         color = PremiumGold,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = FontFamily.Monospace,
                         letterSpacing = 1.sp,
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
+                        modifier = Modifier.weight(1f).padding(horizontal = 10.dp)
                     )
 
-                    // Page Progress Indicator Badge
                     Box(
                         modifier = Modifier
-                            .background(Graphite, RoundedCornerShape(8.dp))
+                            .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
                             .border(0.5.dp, PremiumGold.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
                         Text(
                             text = "${pagerState.currentPage + 1} / $pageCount",
@@ -251,75 +292,88 @@ fun InAppPdfViewer(
                 }
             }
         }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
+
+        // Animated overlay for Floating Bottom Bar
+        AnimatedVisibility(
+            visible = controlsVisible,
+            enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+            exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
+            modifier = Modifier.align(Alignment.BottomCenter)
         ) {
-            HorizontalPager(
-                state = pagerState,
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.85f)),
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                border = BorderStroke(1.dp, PremiumGold.copy(alpha = 0.35f)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
-                    .background(Color.Black)
-            ) { pageIndex ->
-                PdfPageItem(
-                    renderer = pdfRendererState!!,
-                    pageIndex = pageIndex
-                )
-            }
-
-            // Page Navigation Strip at the bottom
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.95f))
-                    .padding(vertical = 14.dp, horizontal = 24.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .shadow(16.dp, RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
             ) {
-                IconButton(
-                    onClick = {
-                        coroutineScope.launch {
-                            if (pagerState.currentPage > 0) {
-                                pagerState.animateScrollToPage(pagerState.currentPage - 1)
-                            }
-                        }
-                    },
-                    enabled = pagerState.currentPage > 0,
-                    modifier = Modifier.background(Graphite, CircleShape)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp, horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowLeft,
-                        contentDescription = "Prev",
-                        tint = if (pagerState.currentPage > 0) PremiumGold else SubduedGray
-                    )
-                }
-
-                Text(
-                    text = "Pinch to zoom, swipe to turn pages",
-                    fontSize = 11.sp,
-                    color = SubduedGray,
-                    fontWeight = FontWeight.Medium
-                )
-
-                IconButton(
-                    onClick = {
-                        coroutineScope.launch {
-                            if (pagerState.currentPage < pageCount - 1) {
-                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                    IconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                if (pagerState.currentPage > 0) {
+                                    pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                                }
                             }
-                        }
-                    },
-                    enabled = pagerState.currentPage < pageCount - 1,
-                    modifier = Modifier.background(Graphite, CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowRight,
-                        contentDescription = "Next",
-                        tint = if (pagerState.currentPage < pageCount - 1) PremiumGold else SubduedGray
-                    )
+                        },
+                        enabled = pagerState.currentPage > 0,
+                        modifier = Modifier.background(Color.White.copy(alpha = 0.08f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowLeft,
+                            contentDescription = "Prev",
+                            tint = if (pagerState.currentPage > 0) PremiumGold else SubduedGray
+                        )
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                    ) {
+                        Text(
+                            text = "SINGLE-TAP CONTENT TO CHROME SHIFT",
+                            fontSize = 9.sp,
+                            color = PremiumGold,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 0.5.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "PINCH TO ZOOM AND PAN DOCUMENT",
+                            fontSize = 8.sp,
+                            color = SubduedGray,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                if (pagerState.currentPage < pageCount - 1) {
+                                    pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                }
+                            }
+                        },
+                        enabled = pagerState.currentPage < pageCount - 1,
+                        modifier = Modifier.background(Color.White.copy(alpha = 0.08f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowRight,
+                            contentDescription = "Next",
+                            tint = if (pagerState.currentPage < pageCount - 1) PremiumGold else SubduedGray
+                        )
+                    }
                 }
             }
         }
@@ -329,38 +383,74 @@ fun InAppPdfViewer(
 @Composable
 fun PdfPageItem(
     renderer: PdfRenderer,
-    pageIndex: Int
+    pageIndex: Int,
+    bitmapCache: java.util.LinkedHashMap<Int, Bitmap>,
+    onToggleControls: () -> Unit
 ) {
-    var pageBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    val cached = remember(pageIndex) {
+        synchronized(bitmapCache) {
+            bitmapCache[pageIndex]
+        }
+    }
+    var pageBitmap by remember(pageIndex) { mutableStateOf<Bitmap?>(cached) }
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
 
     // Render page inside LaunchedEffect to prevent lagging UI thread
     LaunchedEffect(pageIndex) {
-        val bitmap = withContext(Dispatchers.IO) {
-            try {
-                val page = renderer.openPage(pageIndex)
-                
-                // Scale up target quality for pin-sharp typography in embedded viewing
-                val scaleFactor = 3f
-                val w = (page.width * scaleFactor).toInt()
-                val h = (page.height * scaleFactor).toInt()
-                
-                val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                page.close()
-                bmp
-            } catch (e: Exception) {
-                e.printStackTrace()
-                null
+        if (pageBitmap == null) {
+            val bitmap = withContext(Dispatchers.IO) {
+                try {
+                    val page = renderer.openPage(pageIndex)
+                    
+                    // Scale up target quality for pin-sharp typography in embedded viewing
+                    val scaleFactor = 3f
+                    val w = (page.width * scaleFactor).toInt()
+                    val h = (page.height * scaleFactor).toInt()
+                    
+                    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                    bmp.eraseColor(android.graphics.Color.WHITE)
+                    page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    page.close()
+                    
+                    synchronized(bitmapCache) {
+                        bitmapCache[pageIndex] = bmp
+                    }
+                    bmp
+                } catch (e: Throwable) {
+                    e.printStackTrace()
+                    // Graceful memory fallback: try rendering with 1x scale if 3x triggers OutOfMemoryError
+                    try {
+                        val page = renderer.openPage(pageIndex)
+                        val w = page.width
+                        val h = page.height
+                        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                        bmp.eraseColor(android.graphics.Color.WHITE)
+                        page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        page.close()
+                        
+                        synchronized(bitmapCache) {
+                            bitmapCache[pageIndex] = bmp
+                        }
+                        bmp
+                    } catch (t: Throwable) {
+                        t.printStackTrace()
+                        null
+                    }
+                }
             }
+            pageBitmap = bitmap
         }
-        pageBitmap = bitmap
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .pointerInput(pageIndex) {
+                detectTapGestures(
+                    onTap = { onToggleControls() }
+                )
+            }
             .pointerInput(pageIndex) {
                 detectTransformGestures { _, pan, zoom, _ ->
                     scale = (scale * zoom).coerceIn(1f, 4f)
@@ -380,19 +470,27 @@ fun PdfPageItem(
         contentAlignment = Alignment.Center
     ) {
         if (pageBitmap != null) {
-            Image(
-                bitmap = pageBitmap!!.asImageBitmap(),
-                contentDescription = "Page ${pageIndex + 1}",
-                contentScale = ContentScale.Fit,
+            Card(
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                shape = RoundedCornerShape(2.dp),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
                 modifier = Modifier
-                    .fillMaxSize()
+                    .padding(16.dp)
                     .graphicsLayer(
                         scaleX = scale,
                         scaleY = scale,
                         translationX = offset.x,
                         translationY = offset.y
                     )
-            )
+            ) {
+                Image(
+                    bitmap = pageBitmap!!.asImageBitmap(),
+                    contentDescription = "Page ${pageIndex + 1}",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         } else {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 CircularProgressIndicator(color = PremiumGold, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))

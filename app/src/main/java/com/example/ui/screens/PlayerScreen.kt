@@ -180,7 +180,7 @@ fun PlayerScreen(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        containerColor = Color.Black
+        containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         if (isFullscreen) {
             FullscreenPlayerView(
@@ -231,7 +231,7 @@ fun PlayerScreen(
                     Icon(
                         imageVector = Icons.Default.ArrowBack,
                         contentDescription = "Back",
-                        tint = Color.White
+                        tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
@@ -240,7 +240,7 @@ fun PlayerScreen(
                         text = activeLesson.title,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onBackground,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -387,15 +387,21 @@ fun PlayerScreen(
                 )
             } else {
                 // 1. PREMIUM VISUAL HERO HEADERS FOR NON-VIDEO LEARNING ELEMENTS
+                val isLightTheme = AashiqTheme.colors.isLight
+                val headerBrush = if (isLightTheme) {
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFFFDFBF7), Color(0xFFF3EFE7))
+                    )
+                } else {
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFF1E1708), Color(0xFF141414))
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(240.dp)
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(Color(0xFF1E1708), Color(0xFF141414))
-                            )
-                        )
+                        .background(brush = headerBrush)
                         .padding(20.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -451,7 +457,7 @@ fun PlayerScreen(
                             text = activeLesson.title,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onBackground,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
@@ -794,7 +800,8 @@ fun NotesTabContent(
             RichNotesRenderer(
                 noteContent = localNote,
                 onOpenPdf = onOpenPdf,
-                onOpenLesson = onOpenLesson
+                onOpenLesson = onOpenLesson,
+                isNested = true
             )
         }
     } else {
@@ -807,7 +814,8 @@ fun NotesTabContent(
             RichNotesRenderer(
                 noteContent = localNote,
                 onOpenPdf = onOpenPdf,
-                onOpenLesson = onOpenLesson
+                onOpenLesson = onOpenLesson,
+                isNested = false
             )
         }
     }

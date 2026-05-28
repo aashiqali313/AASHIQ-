@@ -259,10 +259,13 @@ fun SettingsScreen(
             }
 
             if (cacheClearedAlert) {
+                val isLightTheme = AashiqTheme.colors.isLight
+                val greenBg = if (isLightTheme) Color(0xFFE8F5E9) else Color(0xFF1E2818)
+                val greenText = if (isLightTheme) Color(0xFF2E7D32) else Color(0xFF81C784)
                 Box(
                     modifier = Modifier
-                        .background(Color(0xFF1E2818), RoundedCornerShape(8.dp))
-                        .border(0.5.dp, Color(0xFF81C784), RoundedCornerShape(8.dp))
+                        .background(greenBg, RoundedCornerShape(8.dp))
+                        .border(0.5.dp, greenText, RoundedCornerShape(8.dp))
                         .fillMaxWidth()
                         .padding(12.dp)
                 ) {
@@ -273,13 +276,15 @@ fun SettingsScreen(
                     ) {
                         Text(
                             text = "SUCCESS: Cache space purged and database alignments processed!",
-                            color = Color(0xFF81C784),
+                            color = greenText,
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "OK",
-                            color = Color.White,
+                            color = greenText,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
                             modifier = Modifier.clickable { cacheClearedAlert = false }
