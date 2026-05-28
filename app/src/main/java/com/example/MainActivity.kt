@@ -62,11 +62,31 @@ class MainActivity : ComponentActivity() {
                     composable("home") {
                         HomeScreen(
                             viewModel = viewModel,
-                            onNavigateToSearch = { navController.navigate("search") },
-                            onNavigateToSettings = { navController.navigate("settings") },
-                            onNavigateToCourseDetail = { id -> navController.navigate("course_detail/$id") },
-                            onNavigateToPlayer = { id -> navController.navigate("player/$id") },
-                            onNavigateToCertificatesVault = { navController.navigate("certificates_vault") }
+                            onNavigateToSearch = { 
+                                if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
+                                    navController.navigate("search")
+                                }
+                            },
+                            onNavigateToSettings = { 
+                                if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
+                                    navController.navigate("settings")
+                                }
+                            },
+                            onNavigateToCourseDetail = { id -> 
+                                if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
+                                    navController.navigate("course_detail/$id")
+                                }
+                            },
+                            onNavigateToPlayer = { id -> 
+                                if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
+                                    navController.navigate("player/$id")
+                                }
+                            },
+                            onNavigateToCertificatesVault = { 
+                                if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
+                                    navController.navigate("certificates_vault")
+                                }
+                            }
                         )
                     }
 
@@ -88,8 +108,16 @@ class MainActivity : ComponentActivity() {
                         SearchScreen(
                             viewModel = viewModel,
                             onNavigateBack = { navController.popBackStack() },
-                            onNavigateToCourseDetail = { id -> navController.navigate("course_detail/$id") },
-                            onNavigateToPlayer = { id -> navController.navigate("player/$id") }
+                            onNavigateToCourseDetail = { id -> 
+                                if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
+                                    navController.navigate("course_detail/$id")
+                                }
+                            },
+                            onNavigateToPlayer = { id -> 
+                                if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
+                                    navController.navigate("player/$id")
+                                }
+                            }
                         )
                     }
                     
@@ -102,7 +130,11 @@ class MainActivity : ComponentActivity() {
                             viewModel = viewModel,
                             courseId = courseId,
                             onNavigateBack = { navController.popBackStack() },
-                            onNavigateToPlayer = { id -> navController.navigate("player/$id") }
+                            onNavigateToPlayer = { id -> 
+                                if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
+                                    navController.navigate("player/$id")
+                                }
+                            }
                         )
                     }
                     

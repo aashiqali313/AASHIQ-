@@ -22,7 +22,18 @@ data class AashiqColors(
 )
 
 val LocalAashiqColors = staticCompositionLocalOf<AashiqColors> {
-    error("No AashiqColors provided")
+    AashiqColors(
+        background = Color(0xFF070707),
+        surface = Color(0xFF111111),
+        elevatedSurface = Color(0xFF1B1B1B),
+        card = Color(0xFF222222),
+        textPrimary = Color(0xFFFDFDFD),
+        textSecondary = Color(0xFFADADAD),
+        accent = Color(0xFFD4AF37),
+        border = Color(0xFF8E711A),
+        glassBlur = Color(0x59161616),
+        isLight = false
+    )
 }
 
 object AashiqTheme {

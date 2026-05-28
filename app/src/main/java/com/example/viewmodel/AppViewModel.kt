@@ -78,55 +78,60 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         repository.allCourses,
         repository.allLessonsFlow
     ) { profile, courses, lessons ->
-        // Total watch minutes from video-type lessons
-        val watchMs = lessons.filter { it.type.lowercase() == "video" }.sumOf { it.progressMs }
-        val watchMins = watchMs / 60000L
+        try {
+            // Total watch minutes from video-type lessons
+            val watchMs = lessons.filter { it.type.lowercase() == "video" }.sumOf { it.progressMs }
+            val watchMins = watchMs / 60000L
 
-        // Reading time estimation: e.g., 5 mins per article, 8 mins per PDF lesson, 3 mins per gallery that is completed
-        val completedArticles = lessons.filter { it.type.lowercase() == "article" && it.isCompleted }.size
-        val completedPdfs = lessons.filter { it.type.lowercase() == "pdf" && it.isCompleted }.size
-        val completedGalleries = lessons.filter { it.type.lowercase() == "gallery" && it.isCompleted }.size
-        
-        val calcReadingMins = (completedArticles * 5L) + (completedPdfs * 8L) + (completedGalleries * 3L)
+            // Reading time estimation: e.g., 5 mins per article, 8 mins per PDF lesson, 3 mins per gallery that is completed
+            val completedArticles = lessons.filter { it.type.lowercase() == "article" && it.isCompleted }.size
+            val completedPdfs = lessons.filter { it.type.lowercase() == "pdf" && it.isCompleted }.size
+            val completedGalleries = lessons.filter { it.type.lowercase() == "gallery" && it.isCompleted }.size
+            
+            val calcReadingMins = (completedArticles * 5L) + (completedPdfs * 8L) + (completedGalleries * 3L)
 
-        // Course completion logic checking all formats (video, article, pdf, gallery)
-        // A course is complete if all of its lessons are completed (isCompleted = true)
-        val completedCourses = courses.filter { course ->
-            val courseLessons = lessons.filter { it.courseId == course.id }
-            courseLessons.isNotEmpty() && courseLessons.all { it.isCompleted }
-        }.size
+            // Course completion logic checking all formats (video, article, pdf, gallery)
+            // A course is complete if all of its lessons are completed (isCompleted = true)
+            val completedCourses = courses.filter { course ->
+                val courseLessons = lessons.filter { it.courseId == course.id }
+                courseLessons.isNotEmpty() && courseLessons.all { it.isCompleted }
+            }.size
 
-        // Streak check
-        val streak = calculateLessonsStreak(lessons)
+            // Streak check
+            val streak = calculateLessonsStreak(lessons)
 
-        // XP sum from lessons
-        // Video complete: 20
-        // Article complete: 10
-        // PDF complete: 15
-        // Gallery complete: 10
-        // Quiz complete: 25
-        // Streak bonus: streak days * 10 XP
-        val baseXP = lessons.sumOf { it.earnedXP.toLong() }
-        val streakXP = streak * 10L
-        val totalXP = baseXP + streakXP
+            // XP sum from lessons
+            // Video complete: 20
+            // Article complete: 10
+            // PDF complete: 15
+            // Gallery complete: 10
+            // Quiz complete: 25
+            // Streak bonus: streak days * 10 XP
+            val baseXP = lessons.sumOf { it.earnedXP.toLong() }
+            val streakXP = streak * 10L
+            val totalXP = baseXP + streakXP
 
-        val computedLevel = when {
-            totalXP < 100 -> "Beginner"
-            totalXP < 250 -> "Explorer"
-            totalXP < 500 -> "Disciplined"
-            totalXP < 1000 -> "Elite"
-            totalXP < 2000 -> "Master"
-            else -> "Ascended"
+            val computedLevel = when {
+                totalXP < 100 -> "Beginner"
+                totalXP < 250 -> "Explorer"
+                totalXP < 500 -> "Disciplined"
+                totalXP < 1000 -> "Elite"
+                totalXP < 2000 -> "Master"
+                else -> "Ascended"
+            }
+
+            profile.copy(
+                totalWatchTimeMinutes = watchMins,
+                readingTimeMinutes = calcReadingMins,
+                totalXP = totalXP,
+                level = computedLevel,
+                completedCoursesCount = completedCourses,
+                currentStreak = streak
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+            profile
         }
-
-        profile.copy(
-            totalWatchTimeMinutes = watchMins,
-            readingTimeMinutes = calcReadingMins,
-            totalXP = totalXP,
-            level = computedLevel,
-            completedCoursesCount = completedCourses,
-            currentStreak = streak
-        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserProfileEntity())
 
     val certificatesState: StateFlow<List<CertificateEntity>> = repository.allCertificates
@@ -208,31 +213,58 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // Shared ExoPlayer instance for performance-optimized instant video loading
     private var _exoPlayer: ExoPlayer? = null
+
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    private fun initExoPlayer(): ExoPlayer? {
+        if (_exoPlayer != null) return _exoPlayer
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            return null
+        }
+        return try {
+            val context = getApplication<Application>()
+            val defaultDataSourceFactory = DefaultDataSource.Factory(context)
+            val customDataSourceFactory = androidx.media3.datasource.DataSource.Factory {
+                val upstream = defaultDataSourceFactory.createDataSource()
+                AashiqDecryptingDataSource(context, upstream)
+            }
+            val mediaSourceFactory = DefaultMediaSourceFactory(customDataSourceFactory)
+
+            _exoPlayer = ExoPlayer.Builder(context)
+                .setMediaSourceFactory(mediaSourceFactory)
+                .setLooper(Looper.getMainLooper())
+                .setHandleAudioBecomingNoisy(true)
+                .build().apply {
+                    repeatMode = Player.REPEAT_MODE_OFF
+                    playWhenReady = true
+                }
+            _exoPlayer
+        } catch (e: Exception) {
+            e.printStackTrace()
+            _exoPlayer = null
+            null
+        }
+    }
+
     val exoPlayer: ExoPlayer?
         @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
         get() {
             if (_exoPlayer == null) {
-                val context = getApplication<Application>()
-                val defaultDataSourceFactory = DefaultDataSource.Factory(context)
-                val customDataSourceFactory = androidx.media3.datasource.DataSource.Factory {
-                    val upstream = defaultDataSourceFactory.createDataSource()
-                    AashiqDecryptingDataSource(context, upstream)
-                }
-                val mediaSourceFactory = DefaultMediaSourceFactory(customDataSourceFactory)
-
-                _exoPlayer = ExoPlayer.Builder(context)
-                    .setMediaSourceFactory(mediaSourceFactory)
-                    .setLooper(Looper.getMainLooper())
-                    .setHandleAudioBecomingNoisy(true)
-                    .build().apply {
-                        repeatMode = Player.REPEAT_MODE_OFF
-                        playWhenReady = true
+                if (Looper.myLooper() != Looper.getMainLooper()) {
+                    Handler(Looper.getMainLooper()).post {
+                        initExoPlayer()
                     }
+                } else {
+                    initExoPlayer()
+                }
             }
             return _exoPlayer
         }
 
     init {
+        // Initialize ExoPlayer safely on main thread
+        viewModelScope.launch(Dispatchers.Main) {
+            initExoPlayer()
+        }
         viewModelScope.launch {
             // High-reliability pre-loading
             repository.prepopulateIfEmpty()
@@ -413,10 +445,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return try {
             val context = getApplication<Application>()
             val uri = Uri.parse(uriStr)
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                BitmapFactory.decodeStream(stream)
+            
+            // First decode with inJustDecodeBounds = true to check dimensions
+            val options = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
             }
-        } catch (e: Exception) {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, options)
+            }
+            
+            // Calculate appropriate inSampleSize for downscaling (max 512px)
+            var inSampleSize = 1
+            val maxDim = maxOf(options.outWidth, options.outHeight)
+            if (maxDim > 512) {
+                inSampleSize = maxDim / 512
+            }
+            
+            // Second decode with actual inSampleSize
+            val decodeOptions = BitmapFactory.Options().apply {
+                this.inSampleSize = inSampleSize
+            }
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, decodeOptions)
+            }
+        } catch (e: Throwable) {
             e.printStackTrace()
             null
         }

@@ -48,6 +48,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
+private val pdfPageMemory = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun InAppPdfViewer(
@@ -191,7 +193,12 @@ fun InAppPdfViewer(
         return
     }
 
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { pageCount })
+    val initialPageKey = pdfPath ?: pdfUriStr ?: ""
+    val rememberedPage = remember(initialPageKey) { pdfPageMemory[initialPageKey] ?: 0 }
+    val pagerState = rememberPagerState(
+        initialPage = rememberedPage.coerceIn(0, maxOf(0, pageCount - 1)),
+        pageCount = { pageCount }
+    )
 
     // Page caching to avoid flickering/re-rendering on page swipe
     val bitmapCache = remember(pdfRendererState) {
@@ -206,6 +213,7 @@ fun InAppPdfViewer(
 
     LaunchedEffect(pagerState.currentPage, pageCount) {
         if (pageCount > 0) {
+            pdfPageMemory[initialPageKey] = pagerState.currentPage
             onPageChanged?.invoke(pagerState.currentPage + 1, pageCount)
         }
     }
