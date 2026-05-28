@@ -1005,182 +1005,60 @@ fun PdfViewerMockContent(
 ) {
     val pdfUri = activeLesson.pdfUri
     val context = LocalContext.current
-    val totalPages = 10
-    var currentPage by remember(activeLesson.id) { mutableStateOf(1) }
-    val visitedPages = remember(activeLesson.id) { mutableStateOf(setOf(1)) }
+    val visitedPages = remember(activeLesson.id) { mutableStateOf(setOf<Int>()) }
 
-    LaunchedEffect(currentPage) {
-        val nextSet = visitedPages.value + currentPage
-        visitedPages.value = nextSet
-        val percent = ((nextSet.size.toFloat() / totalPages.toFloat()) * 100).toInt().coerceIn(0, 100)
-        if (percent > activeLesson.pdfProgress) {
-            viewModel.updateLessonProgressState(activeLesson.id, percent)
-        }
-    }
-
-    val pdfName = remember(pdfUri) {
-        if (!pdfUri.isNullOrEmpty()) {
-            try {
-                val uri = Uri.parse(pdfUri)
-                val file = DocumentFile.fromSingleUri(context, uri)
-                file?.name ?: uri.lastPathSegment ?: "Chapter_Attachment.pdf"
-            } catch (e: Exception) {
-                "Chapter_Attachment.pdf"
-            }
-        } else {
-            "Cinematic_Composition_AASHI_01.pdf"
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    if (!pdfUri.isNullOrEmpty()) {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), RoundedCornerShape(8.dp)),
-            contentAlignment = Alignment.Center
+                .fillMaxSize()
+                .background(Color.Black)
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Description,
-                    contentDescription = null,
-                    tint = PremiumGold,
-                    modifier = Modifier.size(40.dp)
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "PDF DOCUMENT VIEWPORT",
-                    color = PremiumGold,
-                    fontSize = 10.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = pdfName,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Box(
-                    modifier = Modifier
-                        .size(100.dp, 120.dp)
-                        .background(Color.DarkGray, RoundedCornerShape(4.dp))
-                        .border(1.dp, PremiumGold.copy(alpha = 0.3f), RoundedCornerShape(4.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "PAGE",
-                            fontSize = 10.sp,
-                            color = SubduedGray,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "$currentPage",
-                            fontSize = 24.sp,
-                            color = PremiumGold,
-                            fontWeight = FontWeight.Black
-                        )
-                        Text(
-                            text = "of $totalPages",
-                            fontSize = 10.sp,
-                            color = SubduedGray
-                        )
+            InAppPdfViewer(
+                pdfPath = null,
+                pdfUriStr = pdfUri,
+                onClose = { /* Local embed inside player screen tabs - no closure needed */ },
+                title = activeLesson.title,
+                onPageChanged = { currentPage, totalPages ->
+                    if (totalPages > 0) {
+                        val nextSet = visitedPages.value + currentPage
+                        visitedPages.value = nextSet
+                        val percent = ((nextSet.size.toFloat() / totalPages.toFloat()) * 100).toInt().coerceIn(0, 100)
+                        if (percent > activeLesson.pdfProgress) {
+                            viewModel.updateLessonProgressState(activeLesson.id, percent)
+                        }
                     }
                 }
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = { if (currentPage > 1) currentPage-- },
-                enabled = currentPage > 1,
-                modifier = Modifier.background(Graphite, CircleShape)
-            ) {
-                Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Prev", tint = PremiumGold)
-            }
-
-            Text(
-                text = "Pages Read: ${visitedPages.value.size} / $totalPages (${activeLesson.pdfProgress}%)",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = WarmWhite
             )
-
-            IconButton(
-                onClick = { if (currentPage < totalPages) currentPage++ },
-                enabled = currentPage < totalPages,
-                modifier = Modifier.background(Graphite, CircleShape)
-            ) {
-                Icon(imageVector = Icons.Default.ArrowForward, contentDescription = "Next", tint = PremiumGold)
-            }
         }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        if (!pdfUri.isNullOrEmpty()) {
-            Button(
-                onClick = {
-                    try {
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(Uri.parse(pdfUri), "application/pdf")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "No PDF Reader App found on device", Toast.LENGTH_LONG).show()
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = PremiumGold),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, tint = Color.Black, modifier = Modifier.size(13.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text("OPEN HIGH-RES HANDBOOK NATIVELY", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-
-        if (activeLesson.isCompleted) {
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF2E7D32).copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                    .border(0.5.dp, Color(0xFF2E7D32), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("🛡️", fontSize = 14.sp)
-                Spacer(modifier = Modifier.width(8.dp))
+    } else {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Default.CloudOff,
+                    contentDescription = null,
+                    tint = PremiumGold,
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Reading Criteria Met (80% Pages)! Earned +15 XP",
+                    text = "NO COMPENDIUM HANDBOOK ATTACHED",
+                    color = PremiumGold,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF81C784)
+                    fontFamily = FontFamily.Monospace
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "This specific Masterclass segment does not include an offline PDF compendium.",
+                    color = SubduedGray,
+                    fontSize = 10.sp,
+                    textAlign = TextAlign.Center
                 )
             }
         }

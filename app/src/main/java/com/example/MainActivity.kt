@@ -65,7 +65,15 @@ class MainActivity : ComponentActivity() {
                             onNavigateToSearch = { navController.navigate("search") },
                             onNavigateToSettings = { navController.navigate("settings") },
                             onNavigateToCourseDetail = { id -> navController.navigate("course_detail/$id") },
-                            onNavigateToPlayer = { id -> navController.navigate("player/$id") }
+                            onNavigateToPlayer = { id -> navController.navigate("player/$id") },
+                            onNavigateToCertificatesVault = { navController.navigate("certificates_vault") }
+                        )
+                    }
+
+                    composable("certificates_vault") {
+                        CertificatesVaultScreen(
+                            viewModel = viewModel,
+                            onNavigateBack = { navController.popBackStack() }
                         )
                     }
                     

@@ -71,7 +71,8 @@ fun HomeScreen(
     onNavigateToSearch: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToCourseDetail: (String) -> Unit,
-    onNavigateToPlayer: (String) -> Unit
+    onNavigateToPlayer: (String) -> Unit,
+    onNavigateToCertificatesVault: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val courses by viewModel.coursesState.collectAsState()
@@ -151,12 +152,12 @@ fun HomeScreen(
                     )
                 }
 
-                // Certificates Row
+                // Certificates Vault Link
                 if (certificates.isNotEmpty()) {
                     item {
-                        CertificatesHorizontalRow(
-                            certificates = certificates,
-                            onViewCertificate = { selectedCertificateToView = it }
+                        PremiumCertificatesVaultBanner(
+                            certificatesCount = certificates.size,
+                            onClick = onNavigateToCertificatesVault
                         )
                     }
                 }
@@ -1169,70 +1170,100 @@ fun StatItemBox(
 }
 
 @Composable
-fun CertificatesHorizontalRow(
-    certificates: List<CertificateEntity>,
-    onViewCertificate: (CertificateEntity) -> Unit
+fun PremiumCertificatesVaultBanner(
+    certificatesCount: Int,
+    onClick: () -> Unit
 ) {
     Column(
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        Text(
-            text = "CLAIMED CERTIFICATES",
-            style = MaterialTheme.typography.labelMedium,
-            color = PremiumGold,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 2.sp,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.08f),
+                            Color.White.copy(alpha = 0.02f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .border(
+                    width = 1.2.dp,
+                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            PremiumGold.copy(alpha = 0.4f),
+                            Color.White.copy(alpha = 0.08f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .clickable { onClick() }
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            items(certificates) { cert ->
-                Card(
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Subtle glowing gold vault icon holder
+                Box(
                     modifier = Modifier
-                        .width(220.dp)
-                        .clickable { onViewCertificate(cert) },
-                    colors = CardDefaults.cardColors(containerColor = CharcoalGray),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, PremiumGold.copy(alpha = 0.2f))
+                        .size(46.dp)
+                        .background(PremiumGold.copy(alpha = 0.08f), CircleShape)
+                        .border(1.dp, PremiumGold.copy(alpha = 0.35f), CircleShape),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(60.dp)
-                                .background(Graphite, RoundedCornerShape(6.dp))
-                                .border(0.5.dp, PremiumGold.copy(alpha = 0.15f), RoundedCornerShape(6.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Done,
-                                contentDescription = null,
-                                tint = PremiumGold,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = cert.courseName,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = WarmWhite,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = cert.certificateId,
-                            fontSize = 10.sp,
-                            color = PremiumGold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.WorkspacePremium,
+                        contentDescription = null,
+                        tint = PremiumGold,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
+
+                Spacer(modifier = Modifier.width(14.dp))
+
+                Column {
+                    Text(
+                        text = "CERTIFICATES VAULT",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Black,
+                        color = WarmWhite,
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        text = "View secure cryptographically signed sheets",
+                        fontSize = 10.sp,
+                        color = SubduedGray,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            // Gold outlined button indicator showing counts
+            Row(
+                modifier = Modifier
+                    .background(PremiumGold.copy(alpha = 0.05f), RoundedCornerShape(10.dp))
+                    .border(1.dp, PremiumGold, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "$certificatesCount EARNED",
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    color = PremiumGold
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = PremiumGold,
+                    modifier = Modifier.size(14.dp)
+                )
             }
         }
     }
