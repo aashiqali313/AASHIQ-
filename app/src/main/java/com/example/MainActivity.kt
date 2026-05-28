@@ -86,7 +86,19 @@ class MainActivity : ComponentActivity() {
                                 if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
                                     navController.navigate("certificates_vault")
                                 }
+                            },
+                            onNavigateToDisciplineTracker = {
+                                if (navController.currentBackStackEntry?.lifecycle?.currentState == androidx.lifecycle.Lifecycle.State.RESUMED) {
+                                    navController.navigate("discipline_tracker")
+                                }
                             }
+                        )
+                    }
+
+                    composable("discipline_tracker") {
+                        DisciplineTrackerScreen(
+                            viewModel = viewModel,
+                            onNavigateBack = { navController.popBackStack() }
                         )
                     }
 

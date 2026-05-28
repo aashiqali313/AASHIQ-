@@ -76,8 +76,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val profileState: StateFlow<UserProfileEntity> = combine(
         repository.userProfile.map { it ?: UserProfileEntity() },
         repository.allCourses,
-        repository.allLessonsFlow
-    ) { profile, courses, lessons ->
+        repository.allLessonsFlow,
+        repository.allHabitLogs
+    ) { profile, courses, lessons, habitLogs ->
         try {
             // Total watch minutes from video-type lessons
             val watchMs = lessons.filter { it.type.lowercase() == "video" }.sumOf { it.progressMs }
@@ -107,9 +108,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // Gallery complete: 10
             // Quiz complete: 25
             // Streak bonus: streak days * 10 XP
+            val habitXP = habitLogs.sumOf { it.earnedXP.toLong() }
             val baseXP = lessons.sumOf { it.earnedXP.toLong() }
             val streakXP = streak * 10L
-            val totalXP = baseXP + streakXP
+            val totalXP = baseXP + streakXP + habitXP
 
             val computedLevel = when {
                 totalXP < 100 -> "Beginner"
@@ -268,6 +270,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             // High-reliability pre-loading
             repository.prepopulateIfEmpty()
+            prepopulateHabitsIfEmpty()
         }
     }
 
@@ -669,6 +672,168 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteAllCourses() {
         viewModelScope.launch {
             repository.deleteAllCourses()
+        }
+    }
+
+    // --- Habit & Discipline Tracker Settings ---
+    val selectedDate = MutableStateFlow(getTodayDateString())
+
+    val habitsWithLogsForSelectedDate: StateFlow<List<HabitWithLog>> = combine(
+        repository.allHabits,
+        repository.allHabitLogs,
+        selectedDate
+    ) { habits, logs, date ->
+        val dateLogs = logs.filter { it.date == date }
+        habits.map { habit ->
+            HabitWithLog(
+                habit = habit,
+                log = dateLogs.find { it.habitId == habit.id }
+            )
+        }.sortedBy { it.habit.displayOrder }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun getTodayDateString(): String {
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+        return sdf.format(java.util.Date())
+    }
+
+    fun setTodayDate() {
+        selectedDate.value = getTodayDateString()
+    }
+
+    fun setSelectedDate(dateStr: String) {
+        selectedDate.value = dateStr
+    }
+
+    fun createHabit(
+        title: String,
+        description: String,
+        category: String,
+        type: String,
+        icon: String,
+        color: Long,
+        repeatSchedule: String,
+        reminderTime: String?,
+        dailyTargetValue: Float,
+        targetUnit: String,
+        xpReward: Int
+    ) {
+        viewModelScope.launch {
+            val allCurrent = repository.allHabits.first()
+            val maxOrder = allCurrent.maxOfOrNull { it.displayOrder } ?: 0
+            val habit = HabitEntity(
+                id = UUID.randomUUID().toString(),
+                title = title,
+                description = description,
+                category = category,
+                type = type,
+                icon = icon,
+                color = color,
+                repeatSchedule = repeatSchedule,
+                reminderTime = reminderTime,
+                dailyTargetValue = dailyTargetValue,
+                targetUnit = targetUnit,
+                xpReward = xpReward,
+                displayOrder = maxOrder + 1
+            )
+            repository.insertHabit(habit)
+        }
+    }
+
+    fun updateHabit(habit: HabitEntity) {
+        viewModelScope.launch {
+            repository.updateHabit(habit)
+        }
+    }
+
+    fun deleteHabit(id: String) {
+        viewModelScope.launch {
+            repository.deleteHabitById(id)
+        }
+    }
+
+    fun reorderHabits(reorderedList: List<HabitEntity>) {
+        viewModelScope.launch {
+            val updated = reorderedList.mapIndexed { index, habit ->
+                habit.copy(displayOrder = index)
+            }
+            repository.insertHabits(updated)
+        }
+    }
+
+    fun logHabitProgress(habitId: String, date: String, progressValue: Float, isCompleted: Boolean, xpReward: Int) {
+        viewModelScope.launch {
+            val existing = repository.getLogForHabitAndDate(habitId, date)
+            val earnedXp = if (isCompleted) xpReward else 0
+            val log = HabitLogEntity(
+                id = existing?.id ?: UUID.randomUUID().toString(),
+                habitId = habitId,
+                date = date,
+                progressValue = progressValue,
+                isCompleted = isCompleted,
+                earnedXP = earnedXp,
+                loggedAt = System.currentTimeMillis()
+            )
+            repository.insertHabitLog(log)
+        }
+    }
+
+    fun prepopulateHabitsIfEmpty() {
+        viewModelScope.launch {
+            val current = repository.allHabits.first()
+            if (current.isEmpty()) {
+                val samples = listOf(
+                    HabitEntity(
+                        id = "habit_1",
+                        title = "Looksmaxxing Skincare Routine",
+                        description = "Ice rolling, cleanse, moisturize & sunscreen for elite radiance.",
+                        category = "Looksmaxxing",
+                        type = "checkbox",
+                        icon = "Face",
+                        color = 0xFFD4AF37,
+                        displayOrder = 0,
+                        xpReward = 15
+                    ),
+                    HabitEntity(
+                        id = "habit_2",
+                        title = "Hydration Challenge",
+                        description = "Drink water to stay energized and hydrated throughout the day.",
+                        category = "Health",
+                        type = "numeric",
+                        icon = "Water",
+                        color = 0xFF4A90E2,
+                        dailyTargetValue = 8.0f,
+                        targetUnit = "glasses",
+                        displayOrder = 1,
+                        xpReward = 10
+                    ),
+                    HabitEntity(
+                        id = "habit_3",
+                        title = "Cinematic Gym Core Session",
+                        description = "High density push/pull or explosive functional lifting.",
+                        category = "Fitness",
+                        type = "timer",
+                        icon = "Fitness",
+                        color = 0xFFE15A5A,
+                        dailyTargetValue = 45.0f, // 45 minutes
+                        targetUnit = "min",
+                        displayOrder = 2,
+                        xpReward = 20
+                    ),
+                    HabitEntity(
+                        id = "habit_4",
+                        title = "Premium Coding & Architecture Guild",
+                        description = "Study advanced system designs and write production-level clean code.",
+                        category = "Learning",
+                        type = "checkbox",
+                        icon = "Laptop",
+                        color = 0xFF8E711A,
+                        displayOrder = 3,
+                        xpReward = 25
+                    )
+                )
+                repository.insertHabits(samples)
+            }
         }
     }
 

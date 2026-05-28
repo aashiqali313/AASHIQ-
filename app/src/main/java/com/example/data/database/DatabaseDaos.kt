@@ -131,3 +131,58 @@ interface CertificateDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCertificate(certificate: CertificateEntity)
 }
+
+@Dao
+interface HabitDao {
+    @Query("SELECT * FROM habits WHERE isArchived = 0 ORDER BY displayOrder ASC, createdAt DESC")
+    fun getAllHabitsFlow(): Flow<List<HabitEntity>>
+
+    @Query("SELECT * FROM habits WHERE isArchived = 0 ORDER BY displayOrder ASC, createdAt DESC")
+    suspend fun getAllHabitsDirect(): List<HabitEntity>
+
+    @Query("SELECT * FROM habits WHERE id = :id LIMIT 1")
+    suspend fun getHabitById(id: String): HabitEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHabit(habit: HabitEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertHabits(habits: List<HabitEntity>)
+
+    @Query("DELETE FROM habits WHERE id = :id")
+    suspend fun deleteHabitById(id: String)
+
+    @Update
+    suspend fun updateHabit(habit: HabitEntity)
+}
+
+@Dao
+interface HabitLogDao {
+    @Query("SELECT * FROM habit_logs WHERE date = :date")
+    fun getLogsForDateFlow(date: String): Flow<List<HabitLogEntity>>
+
+    @Query("SELECT * FROM habit_logs WHERE date = :date")
+    suspend fun getLogsForDateDirect(date: String): List<HabitLogEntity>
+
+    @Query("SELECT * FROM habit_logs WHERE habitId = :habitId AND date = :date LIMIT 1")
+    suspend fun getLogForHabitAndDate(habitId: String, date: String): HabitLogEntity?
+
+    @Query("SELECT * FROM habit_logs WHERE habitId = :habitId ORDER BY date DESC")
+    fun getLogsForHabitFlow(habitId: String): Flow<List<HabitLogEntity>>
+
+    @Query("SELECT * FROM habit_logs WHERE habitId = :habitId ORDER BY date DESC")
+    suspend fun getLogsForHabitDirect(habitId: String): List<HabitLogEntity>
+
+    @Query("SELECT * FROM habit_logs")
+    fun getAllLogsFlow(): Flow<List<HabitLogEntity>>
+
+    @Query("SELECT * FROM habit_logs")
+    suspend fun getAllLogsDirect(): List<HabitLogEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLog(log: HabitLogEntity)
+
+    @Query("DELETE FROM habit_logs WHERE habitId = :habitId")
+    suspend fun deleteLogsForHabit(habitId: String)
+}
+

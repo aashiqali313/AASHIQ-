@@ -27,6 +27,8 @@ class CourseRepository(private val database: AppDatabase) {
     private val userSettingsDao = database.userSettingsDao()
     private val userProfileDao = database.userProfileDao()
     private val certificateDao = database.certificateDao()
+    private val habitDao = database.habitDao()
+    private val habitLogDao = database.habitLogDao()
 
     val allCourses: Flow<List<CourseEntity>> = courseDao.getAllCourses()
     val allLessonsFlow: Flow<List<LessonEntity>> = lessonDao.getAllLessonsFlow()
@@ -36,6 +38,77 @@ class CourseRepository(private val database: AppDatabase) {
     val userSettings: Flow<UserSettingsEntity?> = userSettingsDao.getSettingsFlow()
     val userProfile: Flow<UserProfileEntity?> = userProfileDao.getProfileFlow()
     val allCertificates: Flow<List<CertificateEntity>> = certificateDao.getAllCertificates()
+    val allHabits: Flow<List<HabitEntity>> = habitDao.getAllHabitsFlow()
+    val allHabitLogs: Flow<List<HabitLogEntity>> = habitLogDao.getAllLogsFlow()
+
+    suspend fun getHabitById(id: String): HabitEntity? {
+        return withContext(Dispatchers.IO) {
+            habitDao.getHabitById(id)
+        }
+    }
+
+    suspend fun insertHabit(habit: HabitEntity) {
+        withContext(Dispatchers.IO) {
+            habitDao.insertHabit(habit)
+        }
+    }
+
+    suspend fun insertHabits(habits: List<HabitEntity>) {
+        withContext(Dispatchers.IO) {
+            habitDao.insertHabits(habits)
+        }
+    }
+
+    suspend fun deleteHabitById(id: String) {
+        withContext(Dispatchers.IO) {
+            habitDao.deleteHabitById(id)
+            habitLogDao.deleteLogsForHabit(id)
+        }
+    }
+
+    suspend fun updateHabit(habit: HabitEntity) {
+        withContext(Dispatchers.IO) {
+            habitDao.updateHabit(habit)
+        }
+    }
+
+    fun getLogsForDateFlow(date: String): Flow<List<HabitLogEntity>> {
+        return habitLogDao.getLogsForDateFlow(date)
+    }
+
+    suspend fun getLogsForDateDirect(date: String): List<HabitLogEntity> {
+        return withContext(Dispatchers.IO) {
+            habitLogDao.getLogsForDateDirect(date)
+        }
+    }
+
+    suspend fun getLogForHabitAndDate(habitId: String, date: String): HabitLogEntity? {
+        return withContext(Dispatchers.IO) {
+            habitLogDao.getLogForHabitAndDate(habitId, date)
+        }
+    }
+
+    fun getLogsForHabitFlow(habitId: String): Flow<List<HabitLogEntity>> {
+        return habitLogDao.getLogsForHabitFlow(habitId)
+    }
+
+    suspend fun getLogsForHabitDirect(habitId: String): List<HabitLogEntity> {
+        return withContext(Dispatchers.IO) {
+            habitLogDao.getLogsForHabitDirect(habitId)
+        }
+    }
+
+    suspend fun getAllHabitLogsDirect(): List<HabitLogEntity> {
+        return withContext(Dispatchers.IO) {
+            habitLogDao.getAllLogsDirect()
+        }
+    }
+
+    suspend fun insertHabitLog(log: HabitLogEntity) {
+        withContext(Dispatchers.IO) {
+            habitLogDao.insertLog(log)
+        }
+    }
 
     suspend fun getUserProfileDirect(): UserProfileEntity {
         return withContext(Dispatchers.IO) {

@@ -72,7 +72,8 @@ fun HomeScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToCourseDetail: (String) -> Unit,
     onNavigateToPlayer: (String) -> Unit,
-    onNavigateToCertificatesVault: () -> Unit
+    onNavigateToCertificatesVault: () -> Unit,
+    onNavigateToDisciplineTracker: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val courses by viewModel.coursesState.collectAsState()
@@ -149,6 +150,13 @@ fun HomeScreen(
                         lessons = allLessons,
                         certificatesCount = certificates.size,
                         onEditProfileClick = { showProfileEditDialog = true }
+                    )
+                }
+
+                // Discipline Tracker operating system core entry point
+                item {
+                    PremiumDisciplineDashboardBanner(
+                        onClick = onNavigateToDisciplineTracker
                     )
                 }
 
@@ -1258,6 +1266,109 @@ fun PremiumCertificatesVaultBanner(
                     color = PremiumGold
                 )
                 Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = PremiumGold,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PremiumDisciplineDashboardBanner(
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.08f),
+                            Color.White.copy(alpha = 0.02f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .border(
+                    width = 1.2.dp,
+                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            PremiumGold.copy(alpha = 0.6f),
+                            Color.White.copy(alpha = 0.08f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .clickable { onClick() }
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                // Glowing golden flame or calendar icon
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .background(PremiumGold.copy(alpha = 0.08f), CircleShape)
+                        .border(1.dp, PremiumGold.copy(alpha = 0.35f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Whatshot,
+                        contentDescription = null,
+                        tint = PremiumGold,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(14.dp))
+
+                Column {
+                    Text(
+                        text = "OFFLINE DISCIPLINE SYSTEM",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        color = PremiumGold,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Build habits, track streaks, earn XP, and level up.",
+                        fontSize = 11.sp,
+                        color = WarmWhite,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            // Gold outlined button indicator
+            Row(
+                modifier = Modifier
+                    .background(PremiumGold.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                    .border(1.dp, PremiumGold, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "ENTER",
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    color = PremiumGold
+                )
+                Spacer(modifier = Modifier.width(4.dp))
                 Icon(
                     imageVector = Icons.Default.ChevronRight,
                     contentDescription = null,

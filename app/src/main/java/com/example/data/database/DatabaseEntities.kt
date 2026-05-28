@@ -112,3 +112,40 @@ data class CertificateEntity(
     val pdfPath: String? = null
 )
 
+@Entity(tableName = "habits")
+data class HabitEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    val description: String = "",
+    val category: String, // Looksmaxxing, Fitness, Learning, Productivity, Health, Spiritual, Custom
+    val type: String = "checkbox", // checkbox, numeric, timer, streak
+    val icon: String = "Star",
+    val color: Long = 0xFFD4AF37,
+    val repeatSchedule: String = "daily", // comma-separated days or "daily"
+    val reminderTime: String? = null, // e.g., "08:00"
+    val dailyTargetValue: Float = 1.0f,
+    val targetUnit: String = "times",
+    val xpReward: Int = 10,
+    val displayOrder: Int = 0,
+    val isArchived: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "habit_logs")
+data class HabitLogEntity(
+    @PrimaryKey val id: String,
+    val habitId: String,
+    val date: String, // format "yyyy-MM-dd"
+    val progressValue: Float = 0.0f,
+    val isCompleted: Boolean = false,
+    val earnedXP: Int = 0,
+    val loggedAt: Long = System.currentTimeMillis()
+)
+
+data class HabitWithLog(
+    val habit: HabitEntity,
+    val log: HabitLogEntity?
+)
+
+
+
