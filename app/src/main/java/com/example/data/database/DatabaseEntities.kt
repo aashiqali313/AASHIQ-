@@ -40,10 +40,16 @@ data class LessonEntity(
     val progressMs: Long = 0L,
     val subtitleUri: String? = null,
     val pdfUri: String? = null,
-    val type: String = "video", // video, article, pdf, gallery, quick_note, mixed_media
+    val type: String = "video", // video, article, pdf, gallery, quick_note, mixed_media, quiz
     val galleryImagesJson: String? = null, // List of local or remote image URIs as JSON
     val resolution: String? = null,
-    val fileSize: Long = 0L
+    val fileSize: Long = 0L,
+    val isCompleted: Boolean = false,
+    val articleProgress: Int = 0, // scroll percentage 0..100
+    val pdfProgress: Int = 0, // opened pages count or percentage
+    val imageProgress: Int = 0, // viewed images index or count or percentage
+    val quizPassed: Boolean = false,
+    val earnedXP: Int = 0
 )
 
 @Entity(tableName = "playback_progress")
@@ -84,6 +90,9 @@ data class UserProfileEntity(
     val gender: String = "Male",
     val avatarUri: String = "",
     val totalWatchTimeMinutes: Long = 120L,
+    val readingTimeMinutes: Long = 0L,
+    val totalXP: Long = 0L,
+    val level: String = "Beginner",
     val completedCoursesCount: Int = 1,
     val currentStreak: Int = 5,
     val lastActiveTimestamp: Long = System.currentTimeMillis()
@@ -93,9 +102,13 @@ data class UserProfileEntity(
 data class CertificateEntity(
     @PrimaryKey val certificateId: String,
     val userName: String,
+    val profileImage: String = "",
     val courseId: String,
     val courseName: String,
     val completionDate: Long = System.currentTimeMillis(),
-    val hashSignature: String
+    val completionPercentage: Int = 100,
+    val hashSignature: String,
+    val imagePath: String? = null,
+    val pdfPath: String? = null
 )
 

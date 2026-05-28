@@ -95,6 +95,12 @@ class CourseRepository(private val database: AppDatabase) {
         }
     }
 
+    suspend fun updateLesson(lesson: LessonEntity) {
+        withContext(Dispatchers.IO) {
+            lessonDao.updateLesson(lesson)
+        }
+    }
+
     suspend fun addRecentSearch(query: String) {
         if (query.isBlank()) return
         withContext(Dispatchers.IO) {

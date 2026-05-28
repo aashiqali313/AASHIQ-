@@ -62,6 +62,9 @@ interface LessonDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLessons(lessons: List<LessonEntity>)
 
+    @Update
+    suspend fun updateLesson(lesson: LessonEntity)
+
     @Query("UPDATE lessons SET isBookmarked = :isBookmarked WHERE id = :lessonId")
     suspend fun updateBookmark(lessonId: String, isBookmarked: Boolean)
 

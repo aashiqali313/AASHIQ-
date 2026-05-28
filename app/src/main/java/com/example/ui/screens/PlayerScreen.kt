@@ -43,6 +43,7 @@ import androidx.media3.common.Player
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.example.data.database.LessonEntity
+import coil.compose.AsyncImage
 import com.example.ui.theme.*
 import com.example.viewmodel.AppViewModel
 import kotlinx.coroutines.delay
@@ -505,11 +506,21 @@ fun PlayerScreen(
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 when (activeTab) {
-                    0 -> NotesTabContent(
-                        localNote = activeLesson.notePath ?: "## General Information\nEnjoy this high performance lecture.",
-                        onOpenPdf = { activeTab = 2 },
-                        onOpenLesson = { lessonId -> viewModel.selectedLessonId.value = lessonId }
-                    )
+                    0 -> {
+                        if (activeLesson.type.lowercase() == "gallery") {
+                            InspirationalGalleryContent(
+                                activeLesson = activeLesson,
+                                viewModel = viewModel
+                            )
+                        } else {
+                            NotesTabContent(
+                                activeLesson = activeLesson,
+                                viewModel = viewModel,
+                                onOpenPdf = { activeTab = 2 },
+                                onOpenLesson = { lessonId -> viewModel.selectedLessonId.value = lessonId }
+                            )
+                        }
+                    }
                     1 -> LessonsTabContent(
                         lessons = lessons,
                         activeLessonId = activeLesson.id,
@@ -517,7 +528,7 @@ fun PlayerScreen(
                             viewModel.selectedLessonId.value = id
                         }
                     )
-                    2 -> PdfViewerMockContent(pdfUri = activeLesson.pdfUri)
+                    2 -> PdfViewerMockContent(activeLesson = activeLesson, viewModel = viewModel)
                 }
 
             }
@@ -698,20 +709,107 @@ fun RowScope.TabItem(title: String, isActive: Boolean, onClick: () -> Unit) {
 
 @Composable
 fun NotesTabContent(
-    localNote: String,
+    activeLesson: LessonEntity,
+    viewModel: AppViewModel,
     onOpenPdf: (String) -> Unit = {},
     onOpenLesson: (String) -> Unit = {}
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(12.dp)
-    ) {
-        RichNotesRenderer(
-            noteContent = localNote,
-            onOpenPdf = onOpenPdf,
-            onOpenLesson = onOpenLesson
-        )
+    val localNote = activeLesson.notePath ?: "## General Information\nEnjoy this high performance lecture."
+    val type = activeLesson.type.lowercase()
+
+    if (type == "article") {
+        val scrollState = rememberScrollState()
+        
+        // Listen to scroll state changes reactively to sync article reading progress offline!
+        LaunchedEffect(scrollState.value, scrollState.maxValue) {
+            val max = scrollState.maxValue
+            if (max > 0) {
+                val progress = ((scrollState.value.toFloat() / max.toFloat()) * 100).toInt().coerceIn(0, 100)
+                if (progress > activeLesson.articleProgress) {
+                    viewModel.updateLessonProgressState(activeLesson.id, progress)
+                }
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(16.dp)
+        ) {
+            // Read percentage indicator header block
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(PremiumGold.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                    .border(0.5.dp, PremiumGold.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("📖", fontSize = 16.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "READING PROGRESS",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PremiumGold,
+                        letterSpacing = 1.sp
+                    )
+                }
+                
+                Text(
+                    text = "${activeLesson.articleProgress}% READ",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (activeLesson.isCompleted) Color(0xFF81C784) else PremiumGold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+            
+            if (activeLesson.isCompleted) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF2E7D32).copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                        .border(0.5.dp, Color(0xFF2E7D32), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("🛡️", fontSize = 14.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Lesson Complete! Earned +10 XP",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF81C784)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            RichNotesRenderer(
+                noteContent = localNote,
+                onOpenPdf = onOpenPdf,
+                onOpenLesson = onOpenLesson
+            )
+        }
+    } else {
+        // Standard view
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp)
+        ) {
+            RichNotesRenderer(
+                noteContent = localNote,
+                onOpenPdf = onOpenPdf,
+                onOpenLesson = onOpenLesson
+            )
+        }
     }
 }
 
@@ -776,13 +874,154 @@ fun LessonsTabContent(
 }
 
 @Composable
-fun PdfViewerMockContent(pdfUri: String?) {
+fun InspirationalGalleryContent(
+    activeLesson: LessonEntity,
+    viewModel: AppViewModel
+) {
+    val images = listOf(
+        "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=500&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1513829096999-4978602294fc?w=500&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=500&auto=format&fit=crop"
+    )
+
+    var currentIdx by remember(activeLesson.id) { mutableStateOf(0) }
+    val viewedSet = remember(activeLesson.id) { mutableStateOf(setOf(0)) }
+
+    LaunchedEffect(currentIdx) {
+        val nextSet = viewedSet.value + currentIdx
+        viewedSet.value = nextSet
+        val percent = ((nextSet.size.toFloat() / images.size.toFloat()) * 100).toInt().coerceIn(0, 100)
+        if (percent > activeLesson.imageProgress) {
+            viewModel.updateLessonProgressState(activeLesson.id, percent)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "INSPIRATIONAL GALLERY DECK",
+            color = PremiumGold,
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .background(Color.Black, RoundedCornerShape(12.dp))
+                .border(1.dp, PremiumGold.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = images[currentIdx],
+                contentDescription = "Visual Asset $currentIdx",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
+            )
+            
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.65f))
+                    .padding(8.dp)
+            ) {
+                Text(
+                    text = "Curated Aesthetic Element ${currentIdx + 1} of ${images.size}",
+                    color = WarmWhite,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = { if (currentIdx > 0) currentIdx-- },
+                enabled = currentIdx > 0,
+                modifier = Modifier.background(Graphite, CircleShape)
+            ) {
+                Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Prev", tint = PremiumGold)
+            }
+
+            Text(
+                text = "Viewed: ${viewedSet.value.size} / ${images.size} (${activeLesson.imageProgress}%)",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = WarmWhite
+            )
+
+            IconButton(
+                onClick = { if (currentIdx < images.size - 1) currentIdx++ },
+                enabled = currentIdx < images.size - 1,
+                modifier = Modifier.background(Graphite, CircleShape)
+            ) {
+                Icon(imageVector = Icons.Default.ArrowForward, contentDescription = "Next", tint = PremiumGold)
+            }
+        }
+
+        if (activeLesson.isCompleted) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF2E7D32).copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                    .border(0.5.dp, Color(0xFF2E7D32), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("🛡️", fontSize = 14.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Gallery Completed (100% Viewed)! Earned +10 XP",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF81C784)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PdfViewerMockContent(
+    activeLesson: LessonEntity,
+    viewModel: AppViewModel
+) {
+    val pdfUri = activeLesson.pdfUri
     val context = LocalContext.current
+    val totalPages = 10
+    var currentPage by remember(activeLesson.id) { mutableStateOf(1) }
+    val visitedPages = remember(activeLesson.id) { mutableStateOf(setOf(1)) }
+
+    LaunchedEffect(currentPage) {
+        val nextSet = visitedPages.value + currentPage
+        visitedPages.value = nextSet
+        val percent = ((nextSet.size.toFloat() / totalPages.toFloat()) * 100).toInt().coerceIn(0, 100)
+        if (percent > activeLesson.pdfProgress) {
+            viewModel.updateLessonProgressState(activeLesson.id, percent)
+        }
+    }
+
     val pdfName = remember(pdfUri) {
         if (!pdfUri.isNullOrEmpty()) {
             try {
                 val uri = Uri.parse(pdfUri)
-                // Try reading real filename from Uri path or document file
                 val file = DocumentFile.fromSingleUri(context, uri)
                 file?.name ?: uri.lastPathSegment ?: "Chapter_Attachment.pdf"
             } catch (e: Exception) {
@@ -797,13 +1036,12 @@ fun PdfViewerMockContent(pdfUri: String?) {
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(210.dp)
+                .weight(1f)
                 .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
                 .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f), RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center
@@ -816,13 +1054,13 @@ fun PdfViewerMockContent(pdfUri: String?) {
                     imageVector = Icons.Default.Description,
                     contentDescription = null,
                     tint = PremiumGold,
-                    modifier = Modifier.size(44.dp)
+                    modifier = Modifier.size(40.dp)
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = if (!pdfUri.isNullOrEmpty()) "IMPORTED STUDY MATERIAL" else "PREMIUM CURATED CURRICULUM SHEET",
+                    text = "PDF DOCUMENT VIEWPORT",
                     color = PremiumGold,
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold
                 )
@@ -830,53 +1068,122 @@ fun PdfViewerMockContent(pdfUri: String?) {
                 Text(
                     text = pdfName,
                     color = MaterialTheme.colorScheme.onSurface,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 16.dp),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 
-                if (!pdfUri.isNullOrEmpty()) {
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Button(
-                        onClick = {
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW).apply {
-                                    setDataAndType(Uri.parse(pdfUri), "application/pdf")
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                context.startActivity(intent)
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "No PDF Reader App found on device", Toast.LENGTH_LONG).show()
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = PremiumGold),
-                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("OPEN PDF NATIVELY", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                Box(
+                    modifier = Modifier
+                        .size(100.dp, 120.dp)
+                        .background(Color.DarkGray, RoundedCornerShape(4.dp))
+                        .border(1.dp, PremiumGold.copy(alpha = 0.3f), RoundedCornerShape(4.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "PAGE",
+                            fontSize = 10.sp,
+                            color = SubduedGray,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "$currentPage",
+                            fontSize = 24.sp,
+                            color = PremiumGold,
+                            fontWeight = FontWeight.Black
+                        )
+                        Text(
+                            text = "of $totalPages",
+                            fontSize = 10.sp,
+                            color = SubduedGray
+                        )
                     }
-                } else {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "12 pages detailed curriculum notes cached",
-                        color = SubduedGray,
-                        fontSize = 11.sp
-                    )
                 }
             }
         }
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = "✓ PDF document read progress automatically synced offline to current lesson metadata.",
-            color = Color(0xFF81C784),
-            fontSize = 11.sp,
-            textAlign = TextAlign.Center,
-            lineHeight = 15.sp
-        )
+        
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = { if (currentPage > 1) currentPage-- },
+                enabled = currentPage > 1,
+                modifier = Modifier.background(Graphite, CircleShape)
+            ) {
+                Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Prev", tint = PremiumGold)
+            }
+
+            Text(
+                text = "Pages Read: ${visitedPages.value.size} / $totalPages (${activeLesson.pdfProgress}%)",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = WarmWhite
+            )
+
+            IconButton(
+                onClick = { if (currentPage < totalPages) currentPage++ },
+                enabled = currentPage < totalPages,
+                modifier = Modifier.background(Graphite, CircleShape)
+            ) {
+                Icon(imageVector = Icons.Default.ArrowForward, contentDescription = "Next", tint = PremiumGold)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        if (!pdfUri.isNullOrEmpty()) {
+            Button(
+                onClick = {
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(Uri.parse(pdfUri), "application/pdf")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "No PDF Reader App found on device", Toast.LENGTH_LONG).show()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = PremiumGold),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, tint = Color.Black, modifier = Modifier.size(13.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("OPEN HIGH-RES HANDBOOK NATIVELY", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        if (activeLesson.isCompleted) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF2E7D32).copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                    .border(0.5.dp, Color(0xFF2E7D32), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("🛡️", fontSize = 14.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Reading Criteria Met (80% Pages)! Earned +15 XP",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF81C784)
+                )
+            }
+        }
     }
 }
 

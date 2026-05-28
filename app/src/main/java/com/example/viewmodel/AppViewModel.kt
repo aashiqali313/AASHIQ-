@@ -15,6 +15,9 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.example.data.database.*
 import com.example.repository.CourseRepository
+import com.example.utils.CertificateGenerator
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
@@ -75,18 +78,52 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         repository.allCourses,
         repository.allLessonsFlow
     ) { profile, courses, lessons ->
-        val totalWatchMs = lessons.sumOf { it.progressMs }
-        val totalWatchMins = totalWatchMs / 60000L
+        // Total watch minutes from video-type lessons
+        val watchMs = lessons.filter { it.type.lowercase() == "video" }.sumOf { it.progressMs }
+        val watchMins = watchMs / 60000L
 
+        // Reading time estimation: e.g., 5 mins per article, 8 mins per PDF lesson, 3 mins per gallery that is completed
+        val completedArticles = lessons.filter { it.type.lowercase() == "article" && it.isCompleted }.size
+        val completedPdfs = lessons.filter { it.type.lowercase() == "pdf" && it.isCompleted }.size
+        val completedGalleries = lessons.filter { it.type.lowercase() == "gallery" && it.isCompleted }.size
+        
+        val calcReadingMins = (completedArticles * 5L) + (completedPdfs * 8L) + (completedGalleries * 3L)
+
+        // Course completion logic checking all formats (video, article, pdf, gallery)
+        // A course is complete if all of its lessons are completed (isCompleted = true)
         val completedCourses = courses.filter { course ->
             val courseLessons = lessons.filter { it.courseId == course.id }
-            courseLessons.isNotEmpty() && courseLessons.all { it.playProgressPercent >= 90 }
+            courseLessons.isNotEmpty() && courseLessons.all { it.isCompleted }
         }.size
 
+        // Streak check
         val streak = calculateLessonsStreak(lessons)
 
+        // XP sum from lessons
+        // Video complete: 20
+        // Article complete: 10
+        // PDF complete: 15
+        // Gallery complete: 10
+        // Quiz complete: 25
+        // Streak bonus: streak days * 10 XP
+        val baseXP = lessons.sumOf { it.earnedXP.toLong() }
+        val streakXP = streak * 10L
+        val totalXP = baseXP + streakXP
+
+        val computedLevel = when {
+            totalXP < 100 -> "Beginner"
+            totalXP < 250 -> "Explorer"
+            totalXP < 500 -> "Disciplined"
+            totalXP < 1000 -> "Elite"
+            totalXP < 2000 -> "Master"
+            else -> "Ascended"
+        }
+
         profile.copy(
-            totalWatchTimeMinutes = totalWatchMins,
+            totalWatchTimeMinutes = watchMins,
+            readingTimeMinutes = calcReadingMins,
+            totalXP = totalXP,
+            level = computedLevel,
             completedCoursesCount = completedCourses,
             currentStreak = streak
         )
@@ -265,8 +302,123 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val percent = ((currentPosMs * 100) / totalDurationMs).coerceIn(0, 100).toInt()
         viewModelScope.launch(Dispatchers.IO) {
             repository.updateLessonProgress(lessonId, currentPosMs, percent)
-            // AFTER updating lesson progress, check for automatic certificate generation!
+            
+            // Call our unified completion/progress engine
+            updateLessonProgressState(lessonId, percent, currentPosMs)
+        }
+    }
+
+    fun updateLessonProgressState(lessonId: String, progressVal: Int, currentPosMs: Long = 0L, isComp: Boolean? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val lesson = repository.getLessonById(lessonId) ?: return@launch
+            var updatedLesson = lesson
+            val now = System.currentTimeMillis()
+            
+            val wasCompleted = lesson.isCompleted
+            val type = lesson.type.lowercase()
+
+            when (type) {
+                "video" -> {
+                    updatedLesson = lesson.copy(
+                        playProgressPercent = progressVal,
+                        progressMs = if (currentPosMs > 0L) currentPosMs else lesson.progressMs,
+                        lastWatchedTimestamp = now
+                    )
+                    if (progressVal >= 90 && !wasCompleted) {
+                        updatedLesson = updatedLesson.copy(
+                            isCompleted = true,
+                            earnedXP = 20
+                        )
+                    }
+                }
+                "article" -> {
+                    updatedLesson = lesson.copy(
+                        articleProgress = progressVal,
+                        lastWatchedTimestamp = now
+                    )
+                    if (progressVal >= 85 && !wasCompleted) {
+                        updatedLesson = updatedLesson.copy(
+                            isCompleted = true,
+                            earnedXP = 10
+                        )
+                    }
+                }
+                "pdf" -> {
+                    updatedLesson = lesson.copy(
+                        pdfProgress = progressVal,
+                        lastWatchedTimestamp = now
+                    )
+                    if (progressVal >= 80 && !wasCompleted) {
+                        updatedLesson = updatedLesson.copy(
+                            isCompleted = true,
+                            earnedXP = 15
+                        )
+                    }
+                }
+                "gallery" -> {
+                    updatedLesson = lesson.copy(
+                        imageProgress = progressVal,
+                        lastWatchedTimestamp = now
+                    )
+                    if (progressVal >= 100 && !wasCompleted) {
+                        updatedLesson = updatedLesson.copy(
+                            isCompleted = true,
+                            earnedXP = 10
+                        )
+                    }
+                }
+                "quiz" -> {
+                    updatedLesson = lesson.copy(
+                        quizPassed = progressVal >= 80,
+                        lastWatchedTimestamp = now
+                    )
+                    if (progressVal >= 80 && !wasCompleted) {
+                        updatedLesson = updatedLesson.copy(
+                            isCompleted = true,
+                            earnedXP = 25
+                        )
+                    }
+                }
+                else -> {
+                    updatedLesson = lesson.copy(
+                        lastWatchedTimestamp = now
+                    )
+                }
+            }
+
+            if (isComp == true && !updatedLesson.isCompleted) {
+                val xpReward = when (type) {
+                    "video" -> 20
+                    "article" -> 10
+                    "pdf" -> 15
+                    "gallery" -> 10
+                    "quiz" -> 25
+                    else -> 10
+                }
+                updatedLesson = updatedLesson.copy(
+                    isCompleted = true,
+                    earnedXP = xpReward
+                )
+            }
+
+            repository.updateLesson(updatedLesson)
+            
+            // Checks automatic course certification!
             checkAndGenerateCertificateForCourseOfLesson(lessonId)
+        }
+    }
+
+    private fun loadUriAsBitmap(uriStr: String): Bitmap? {
+        if (uriStr.isBlank()) return null
+        return try {
+            val context = getApplication<Application>()
+            val uri = Uri.parse(uriStr)
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
     }
 
@@ -283,26 +435,38 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val lessons = repository.getLessonsForCourseDirect(courseId)
         if (lessons.isEmpty()) return
 
-        val completedCount = lessons.count { it.playProgressPercent >= 90 }
+        val completedCount = lessons.count { it.isCompleted }
         val completionPercent = (completedCount * 100) / lessons.size
 
-        // 3. Compare with settings threshold
-        val settings = repository.getSettingsDirect()
-        val threshold = settings.certificateThresholdPercent
-
-        if (completionPercent >= threshold) {
+        // Only generate automatically when 100% course completed
+        if (completionPercent >= 100) {
             val profile = repository.getUserProfileDirect()
             val certId = "CERT-" + UUID.randomUUID().toString().take(6).uppercase()
             val cleanSignature = "AASHIQ_CERT_${UUID.randomUUID().toString().take(8).uppercase()}"
 
-            val certificate = CertificateEntity(
+            var certificate = CertificateEntity(
                 certificateId = certId,
                 userName = profile.name,
+                profileImage = profile.avatarUri,
                 courseId = courseId,
                 courseName = course.title,
                 completionDate = System.currentTimeMillis(),
+                completionPercentage = 100,
                 hashSignature = cleanSignature
             )
+
+            // Render PNG and PDF
+            val profileBitmap = loadUriAsBitmap(profile.avatarUri)
+            try {
+                val files = CertificateGenerator.generateCertificateFiles(getApplication(), certificate, profileBitmap)
+                certificate = certificate.copy(
+                    imagePath = files.first,
+                    pdfPath = files.second
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+
             repository.insertCertificate(certificate)
             
             // Set newly unlocked certificate to trigger premium UI/popup!

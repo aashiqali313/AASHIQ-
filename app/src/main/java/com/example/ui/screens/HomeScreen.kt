@@ -33,6 +33,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import android.content.Intent
+import java.io.File
+import java.io.FileOutputStream
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.text.style.TextAlign
 import coil.compose.AsyncImage
 import com.example.data.database.CourseEntity
 import com.example.data.database.LessonEntity
@@ -127,6 +145,8 @@ fun HomeScreen(
                 item {
                     ProfileGamificationHeader(
                         profile = userProfile,
+                        lessons = allLessons,
+                        certificatesCount = certificates.size,
                         onEditProfileClick = { showProfileEditDialog = true }
                     )
                 }
@@ -823,61 +843,106 @@ fun getLearningLevel(watchTimeMinutes: Long): String {
 @Composable
 fun ProfileGamificationHeader(
     profile: UserProfileEntity,
+    lessons: List<LessonEntity>,
+    certificatesCount: Int,
     onEditProfileClick: () -> Unit
 ) {
-    val level = getLearningLevel(profile.totalWatchTimeMinutes)
+    val totalCompletedLessons = remember(lessons) { lessons.count { it.isCompleted } }
     
+    // Smooth infinite breathing pulse for streak flame
+    val infiniteTransition = rememberInfiniteTransition(label = "streak")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1.0f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    )
+
+    // Calculate level tiers and progress toward next level
+    val currentXP = profile.totalXP
+    val levelData = remember(currentXP) {
+        when {
+            currentXP < 100 -> Triple("Beginner", 0L, 100L)
+            currentXP < 250 -> Triple("Explorer", 100L, 250L)
+            currentXP < 500 -> Triple("Disciplined", 250L, 500L)
+            currentXP < 1000 -> Triple("Elite", 500L, 1000L)
+            currentXP < 2000 -> Triple("Master", 1000L, 2000L)
+            else -> Triple("Ascended", 2000L, 5000L)
+        }
+    }
+    val levelName = levelData.first
+    val minLevelXP = levelData.second
+    val maxLevelXP = levelData.third
+    val progressFraction = remember(currentXP, minLevelXP, maxLevelXP) {
+        if (maxLevelXP > minLevelXP) {
+            ((currentXP - minLevelXP).toFloat() / (maxLevelXP - minLevelXP).toFloat()).coerceIn(0f, 1f)
+        } else 1f
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp),
         colors = CardDefaults.cardColors(containerColor = CharcoalGray),
         shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, PremiumGold.copy(alpha = 0.3f))
+        border = BorderStroke(1.dp, PremiumGold.copy(alpha = 0.35f))
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
+            // Header Row: Avatar, Name, Edit Button
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Left avatar / Welcome
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(54.dp)
+                            .size(56.dp)
                             .background(Graphite, CircleShape)
                             .border(1.5.dp, PremiumGold, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Avatar",
-                            tint = PremiumGold,
-                            modifier = Modifier.size(32.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = profile.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = WarmWhite
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "${profile.gender}, Age ${profile.age}",
-                                fontSize = 11.sp,
-                                color = SubduedGray
+                        if (profile.avatarUri.isNotEmpty()) {
+                            AsyncImage(
+                                model = profile.avatarUri,
+                                contentDescription = "Avatar",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "Avatar",
+                                tint = PremiumGold,
+                                modifier = Modifier.size(32.dp)
                             )
                         }
                     }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = profile.name,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = WarmWhite
+                            )
+                        }
+                        Text(
+                            text = "${profile.gender}, Age ${profile.age}",
+                            fontSize = 11.sp,
+                            color = SubduedGray
+                        )
+                    }
                 }
                 
-                // Edit profile button
                 IconButton(
                     onClick = onEditProfileClick,
                     modifier = Modifier
@@ -895,106 +960,210 @@ fun ProfileGamificationHeader(
             }
             
             Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
             Spacer(modifier = Modifier.height(12.dp))
-            
-            // Stats blocks row
+
+            // Tier Progress Bar Area
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "LEVEL: ${levelName.uppercase()}",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PremiumGold,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    text = "$currentXP / $maxLevelXP XP",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SubduedGray,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            // Customized luxury golden progress indicator
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .background(Graphite, RoundedCornerShape(3.dp))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(progressFraction)
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(PremiumGold, SoftGoldGlow)
+                            ),
+                            shape = RoundedCornerShape(3.dp)
+                        )
+                )
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Primary Gamified Highlights Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Level Badge
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "RANK LEVEL",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = SubduedGray,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier
-                            .background(PremiumGold.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                            .border(0.5.dp, PremiumGold, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = null,
-                            tint = PremiumGold,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
+                // Streak Card (Animated Flame)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(Graphite, RoundedCornerShape(12.dp))
+                        .border(0.5.dp, PremiumGold.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                        .padding(10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .scale(pulseScale),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "🔥",
+                                fontSize = 24.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = level,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = PremiumGold
+                            text = "${profile.currentStreak} DAYS",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFFFF9800),
+                            letterSpacing = 0.5.sp
                         )
-                    }
-                }
-                
-                // Streak Counter
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "LEARNING STREAK",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = SubduedGray,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier
-                            .background(Color(0xFFFF9800).copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                            .border(0.5.dp, Color(0xFFFF9800), RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Favorite,
-                            contentDescription = null,
-                            tint = Color(0xFFFF9800),
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "${profile.currentStreak} Days",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFFF9800)
+                            text = "STREAK ACTIVE",
+                            fontSize = 8.sp,
+                            color = SubduedGray,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
 
-                // Total Watch metrics
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "WATCH TIME",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = SubduedGray,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier
-                            .background(SubtleElectricBlue.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                            .border(0.5.dp, SubtleElectricBlue, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                // Certificates Card
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(Graphite, RoundedCornerShape(12.dp))
+                        .border(0.5.dp, PremiumGold.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                        .padding(10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "${profile.totalWatchTimeMinutes} Mins",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SubtleElectricBlue
+                            text = "🎓",
+                            fontSize = 24.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "$certificatesCount EARNED",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Black,
+                            color = PremiumGold,
+                            letterSpacing = 0.5.sp
+                        )
+                        Text(
+                            text = "OFFLINE CREDENTIALS",
+                            fontSize = 8.sp,
+                            color = SubduedGray,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Secondary Detailed Statistics Grid
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Courses completed
+                    StatItemBox(
+                        modifier = Modifier.weight(1f),
+                        emoji = "📚",
+                        value = "${profile.completedCoursesCount}",
+                        label = "COURSES COMPLETED"
+                    )
+                    // Lessons completed
+                    StatItemBox(
+                        modifier = Modifier.weight(1f),
+                        emoji = "✅",
+                        value = "$totalCompletedLessons",
+                        label = "LESSONS COMPLETED"
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Watch Time
+                    StatItemBox(
+                        modifier = Modifier.weight(1f),
+                        emoji = "🎥",
+                        value = "${profile.totalWatchTimeMinutes}m",
+                        label = "WATCHING TIME"
+                    )
+                    // Reading Time
+                    StatItemBox(
+                        modifier = Modifier.weight(1f),
+                        emoji = "📖",
+                        value = "${profile.readingTimeMinutes}m",
+                        label = "READING TIME"
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatItemBox(
+    modifier: Modifier = Modifier,
+    emoji: String,
+    value: String,
+    label: String
+) {
+    Row(
+        modifier = modifier
+            .background(Graphite.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+            .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+            .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = emoji,
+            fontSize = 16.sp
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
+            Text(
+                text = value,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = WarmWhite
+            )
+            Text(
+                text = label,
+                fontSize = 7.5.sp,
+                fontWeight = FontWeight.Medium,
+                color = SubduedGray,
+                letterSpacing = 0.2.sp
+            )
         }
     }
 }
@@ -1069,6 +1238,203 @@ fun CertificatesHorizontalRow(
     }
 }
 
+private fun cropAndSaveOffline(context: android.content.Context, original: Bitmap, scale: Float, offsetX: Float, offsetY: Float): String? {
+    return try {
+        val width = original.width
+        val height = original.height
+        val minDim = Math.min(width, height)
+        
+        val matrix = Matrix()
+        matrix.postScale(scale, scale)
+        matrix.postTranslate(offsetX * (width / 220f) * 0.25f, offsetY * (height / 220f) * 0.25f)
+        
+        val scaledBitmap = Bitmap.createBitmap(original, 0, 0, width, height, matrix, true)
+        
+        val outputCircle = Bitmap.createBitmap(minDim, minDim, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(outputCircle)
+        val paint = android.graphics.Paint()
+        val rect = android.graphics.Rect(0, 0, minDim, minDim)
+        
+        paint.isAntiAlias = true
+        canvas.drawARGB(0, 0, 0, 0)
+        canvas.drawCircle(minDim / 2f, minDim / 2f, minDim / 2f, paint)
+        paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+        
+        val srcRect = android.graphics.Rect(
+            ((scaledBitmap.width - minDim) / 2).coerceAtLeast(0),
+            ((scaledBitmap.height - minDim) / 2).coerceAtLeast(0),
+            ((scaledBitmap.width + minDim) / 2).coerceAtMost(scaledBitmap.width),
+            ((scaledBitmap.height + minDim) / 2).coerceAtMost(scaledBitmap.height)
+        )
+        canvas.drawBitmap(scaledBitmap, srcRect, rect, paint)
+
+        val avatarFile = File(context.filesDir, "profile_avatar_${System.currentTimeMillis()}.png")
+        context.filesDir.listFiles { _, name -> name.startsWith("profile_avatar") }?.forEach { it.delete() }
+
+        FileOutputStream(avatarFile).use { fos ->
+            outputCircle.compress(Bitmap.CompressFormat.PNG, 95, fos)
+        }
+        avatarFile.absolutePath
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
+}
+
+@Composable
+fun SimpleCircularCropperDialog(
+    imageUriStr: String,
+    onDismiss: () -> Unit,
+    onCropped: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val bitmap = remember(imageUriStr) {
+        try {
+            val uri = Uri.parse(imageUriStr)
+            context.contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    if (bitmap == null) {
+        onDismiss()
+        return
+    }
+
+    var scale by remember { mutableStateOf(1.0f) }
+    var offsetX by remember { mutableStateOf(0f) }
+    var offsetY by remember { mutableStateOf(0f) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CharcoalGray),
+            shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(1.5.dp, PremiumGold),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "CROP PROFILE PICTURE",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = PremiumGold,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Pinch to zoom and drag to position",
+                    fontSize = 11.sp,
+                    color = SubduedGray,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Box(
+                    modifier = Modifier
+                        .size(220.dp)
+                        .background(Color.Black, RoundedCornerShape(12.dp))
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                scale = (scale * zoom).coerceIn(1f, 4f)
+                                offsetX += pan.x * scale
+                                offsetY += pan.y * scale
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer(
+                                scaleX = scale,
+                                scaleY = scale,
+                                translationX = offsetX / 4f,
+                                translationY = offsetY / 4f
+                            )
+                    )
+
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val circleRadius = size.minDimension / 2.2f
+                        val center = Offset(size.width / 2f, size.height / 2f)
+
+                        val path = Path().apply {
+                            addRect(androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height))
+                        }
+                        val circlePath = Path().apply {
+                            addOval(androidx.compose.ui.geometry.Rect(center.x - circleRadius, center.y - circleRadius, center.x + circleRadius, center.y + circleRadius))
+                        }
+                        val diffPath = Path.combine(PathOperation.Difference, path, circlePath)
+                        drawPath(diffPath, Color.Black.copy(alpha = 0.65f))
+
+                        drawCircle(
+                            color = PremiumGold,
+                            radius = circleRadius,
+                            center = center,
+                            style = Stroke(width = 3.dp.toPx())
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Slider(
+                    value = scale,
+                    onValueChange = { scale = it },
+                    valueRange = 1f..4f,
+                    colors = SliderDefaults.colors(
+                        activeTrackColor = PremiumGold,
+                        inactiveTrackColor = Graphite,
+                        thumbColor = PremiumGold
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("CANCEL", color = SubduedGray)
+                    }
+
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                val croppedResult = cropAndSaveOffline(context, bitmap, scale, offsetX, offsetY)
+                                if (croppedResult != null) {
+                                    onCropped(croppedResult)
+                                } else {
+                                    onCropped(imageUriStr)
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PremiumGold, contentColor = Color.Black),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("APPLY CROP", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileEditDialog(
@@ -1080,6 +1446,23 @@ fun ProfileEditDialog(
     var ageStr by remember { mutableStateOf(profile.age.toString()) }
     var gender by remember { mutableStateOf(profile.gender) }
     var avatarUri by remember { mutableStateOf(profile.avatarUri) }
+
+    var selectedTempUri by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                context.contentResolver.takePersistableUriPermission(uri, takeFlags)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            selectedTempUri = uri.toString()
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1098,8 +1481,69 @@ fun ProfileEditDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Circle Profile Pic Preview with Change Action
+                Box(
+                    modifier = Modifier
+                        .size(90.dp)
+                        .background(Graphite, CircleShape)
+                        .border(2.dp, PremiumGold, CircleShape)
+                        .clickable {
+                            galleryLauncher.launch(
+                                androidx.activity.result.PickVisualMediaRequest(
+                                    ActivityResultContracts.PickVisualMedia.ImageOnly
+                                )
+                            )
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (avatarUri.isNotEmpty()) {
+                        AsyncImage(
+                            model = avatarUri,
+                            contentDescription = "Avatar Preview",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = PremiumGold,
+                            modifier = Modifier.size(48.dp)
+                        )
+                    }
+                    
+                    // Small floating camera badge overlay
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(26.dp)
+                            .background(PremiumGold, CircleShape)
+                            .border(1.5.dp, CharcoalGray, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AddAPhoto,
+                            contentDescription = "Pick Image",
+                            tint = Color.Black,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Tap circle to upload a custom picture",
+                    fontSize = 10.sp,
+                    color = SubduedGray,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -1135,18 +1579,6 @@ fun ProfileEditDialog(
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
-
-                OutlinedTextField(
-                    value = avatarUri,
-                    onValueChange = { avatarUri = it },
-                    label = { Text("Profile Avatar / Image URI", color = SubduedGray) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PremiumGold,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                        focusedLabelColor = PremiumGold
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
         },
         confirmButton = {
@@ -1156,7 +1588,7 @@ fun ProfileEditDialog(
                     onSave(name, finalAge, gender, avatarUri)
                 }
             ) {
-                Text("SAVE", color = PremiumGold, fontWeight = FontWeight.Bold)
+                Text("SAVE PROFILE", color = PremiumGold, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
@@ -1165,6 +1597,18 @@ fun ProfileEditDialog(
             }
         }
     )
+
+    // Crop trigger inline Dialog!
+    if (selectedTempUri != null) {
+        SimpleCircularCropperDialog(
+            imageUriStr = selectedTempUri!!,
+            onDismiss = { selectedTempUri = null },
+            onCropped = { croppedPath ->
+                avatarUri = croppedPath
+                selectedTempUri = null
+            }
+        )
+    }
 }
 
 @Composable

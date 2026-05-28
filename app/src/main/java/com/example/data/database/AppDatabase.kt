@@ -16,7 +16,7 @@ import androidx.room.RoomDatabase
         UserProfileEntity::class,
         CertificateEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
