@@ -4,6 +4,10 @@ import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.media.MediaDataSource
+import android.media.MediaMetadataRetriever
+import java.io.InputStream
+import java.io.IOException
 import androidx.documentfile.provider.DocumentFile
 import com.example.data.database.*
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +29,7 @@ class CourseRepository(private val database: AppDatabase) {
     private val certificateDao = database.certificateDao()
 
     val allCourses: Flow<List<CourseEntity>> = courseDao.getAllCourses()
+    val allLessonsFlow: Flow<List<LessonEntity>> = lessonDao.getAllLessonsFlow()
     val bookmarkedLessons: Flow<List<LessonEntity>> = lessonDao.getBookmarkedLessons()
     val continueWatching: Flow<List<LessonEntity>> = lessonDao.getContinueWatchingLessons()
     val recentSearches: Flow<List<RecentSearchEntity>> = recentSearchDao.getRecentSearches()
@@ -65,6 +70,9 @@ class CourseRepository(private val database: AppDatabase) {
         
     fun getLessonsForCourse(courseId: String): Flow<List<LessonEntity>> = 
         lessonDao.getLessonsForCourse(courseId)
+
+    suspend fun getLessonsForCourseDirect(courseId: String): List<LessonEntity> = 
+        lessonDao.getLessonsForCourseDirect(courseId)
 
     fun getLessonsForModule(moduleId: String): Flow<List<LessonEntity>> = 
         lessonDao.getLessonsForModule(moduleId)
@@ -422,14 +430,14 @@ class CourseRepository(private val database: AppDatabase) {
                     modulesToInsert.add(ModuleEntity(moduleId, courseId, moduleTitle, dirIndex + 1))
 
                     val modFiles = dir.listFiles()
-                    val addedLessons = parseDirectoryFiles(resolver, modFiles, moduleId, courseId)
+                    val addedLessons = parseDirectoryFiles(context, resolver, modFiles, moduleId, courseId)
                     lessonsToInsert.addAll(addedLessons)
                 }
             } else {
                 // Single-module course structure
                 val defaultModuleId = "mod_${courseId}_default"
                 modulesToInsert.add(ModuleEntity(defaultModuleId, courseId, "General Lectures", 1))
-                val addedLessons = parseDirectoryFiles(resolver, files, defaultModuleId, courseId)
+                val addedLessons = parseDirectoryFiles(context, resolver, files, defaultModuleId, courseId)
                 lessonsToInsert.addAll(addedLessons)
             }
 
@@ -530,6 +538,7 @@ class CourseRepository(private val database: AppDatabase) {
     }
 
     private fun parseDirectoryFiles(
+        context: Context,
         resolver: ContentResolver,
         files: Array<DocumentFile>,
         moduleId: String,
@@ -559,6 +568,9 @@ class CourseRepository(private val database: AppDatabase) {
                 "video"
             }
 
+            // Extract ACTUAL media metadata on-the-fly offline!
+            val meta = extractMetadata(context, resolver, file)
+
             lessons.add(
                 LessonEntity(
                     id = lessonId,
@@ -567,11 +579,13 @@ class CourseRepository(private val database: AppDatabase) {
                     title = lessonTitle,
                     videoUri = file.uri.toString(),
                     notePath = noteContent ?: "## $lessonTitle\nEnjoy this offline cinematic video lesson natively on AASHIQ+.",
-                    durationSeconds = 300L,
+                    durationSeconds = meta.durationSeconds,
                     orderIndex = index++,
                     subtitleUri = subtitleUri,
                     pdfUri = pdfUri,
-                    type = type
+                    type = type,
+                    resolution = meta.resolution,
+                    fileSize = meta.fileSize
                 )
             )
         }
@@ -595,7 +609,8 @@ class CourseRepository(private val database: AppDatabase) {
                         durationSeconds = 0L,
                         orderIndex = index++,
                         pdfUri = file.uri.toString(),
-                        type = "pdf"
+                        type = "pdf",
+                        fileSize = file.length()
                     )
                 )
             }
@@ -636,12 +651,116 @@ class CourseRepository(private val database: AppDatabase) {
                         notePath = finalContent,
                         durationSeconds = 0L,
                         orderIndex = index++,
-                        type = type
+                        type = type,
+                        fileSize = file.length()
                     )
                 )
             }
         }
 
         return lessons
+    }
+
+    private fun extractMetadata(context: Context, resolver: ContentResolver, file: DocumentFile): ExtractedMediaMetadata {
+        val retriever = MediaMetadataRetriever()
+        var durationMs = 0L
+        var resolution: String? = null
+        val fileSize = file.length()
+
+        try {
+            val isEncrypted = file.name?.endsWith(".aashiq", ignoreCase = true) == true
+            if (isEncrypted) {
+                val mediaDataSource = DecryptingMediaDataSource(
+                    inputStreamProvider = {
+                        resolver.openInputStream(file.uri) ?: throw IOException("Unable to open input stream")
+                    },
+                    size = fileSize,
+                    isEncrypted = true
+                )
+                retriever.setDataSource(mediaDataSource)
+            } else {
+                resolver.openFileDescriptor(file.uri, "r")?.use { pfd ->
+                    retriever.setDataSource(pfd.fileDescriptor)
+                }
+            }
+
+            val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            if (durationStr != null) {
+                durationMs = durationStr.toLong()
+            }
+
+            val widthStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+            val heightStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+            if (widthStr != null && heightStr != null) {
+                resolution = "${widthStr}x${heightStr}"
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Fallback: 300 seconds default
+            durationMs = 300000L
+        } finally {
+            try {
+                retriever.release()
+            } catch (e: Exception) { /* ignore */ }
+        }
+
+        return ExtractedMediaMetadata(
+            durationSeconds = durationMs / 1000L,
+            resolution = resolution,
+            fileSize = fileSize
+        )
+    }
+
+    private data class ExtractedMediaMetadata(
+        val durationSeconds: Long,
+        val resolution: String?,
+        val fileSize: Long
+    )
+}
+
+class DecryptingMediaDataSource(
+    private val inputStreamProvider: () -> InputStream,
+    private val size: Long,
+    private val isEncrypted: Boolean
+) : MediaDataSource() {
+    private var stream: InputStream? = null
+    private var currentPosition: Long = 0L
+
+    private fun getStreamAt(position: Long): InputStream {
+        var s = stream
+        if (s == null || position < currentPosition) {
+            s?.close()
+            s = inputStreamProvider()
+            s.skip(position)
+            currentPosition = position
+            stream = s
+        } else if (position > currentPosition) {
+            s.skip(position - currentPosition)
+            currentPosition = position
+        }
+        return s!!
+    }
+
+    override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
+        if (position >= this.size) return -1
+        val safeStream = getStreamAt(position)
+        val limit = minOf(size.toLong(), this.size - position).toInt()
+        val read = safeStream.read(buffer, offset, limit)
+        if (read > 0) {
+            if (isEncrypted) {
+                for (i in 0 until read) {
+                    buffer[offset + i] = (buffer[offset + i].toInt() xor 0xAE).toByte()
+                }
+            }
+            currentPosition += read
+        }
+        return read
+    }
+
+    override fun getSize(): Long = size
+
+    override fun close() {
+        stream?.close()
+        stream = null
     }
 }

@@ -41,7 +41,9 @@ data class LessonEntity(
     val subtitleUri: String? = null,
     val pdfUri: String? = null,
     val type: String = "video", // video, article, pdf, gallery, quick_note, mixed_media
-    val galleryImagesJson: String? = null // List of local or remote image URIs as JSON
+    val galleryImagesJson: String? = null, // List of local or remote image URIs as JSON
+    val resolution: String? = null,
+    val fileSize: Long = 0L
 )
 
 @Entity(tableName = "playback_progress")
@@ -70,7 +72,8 @@ data class UserSettingsEntity(
     val volumeGestureEnabled: Boolean = true,
     val brightnessGestureEnabled: Boolean = true,
     val doubleTapSeekEnabled: Boolean = true,
-    val animationIntensityMultiplier: Float = 1.0f
+    val animationIntensityMultiplier: Float = 1.0f,
+    val certificateThresholdPercent: Int = 90
 )
 
 @Entity(tableName = "user_profile")

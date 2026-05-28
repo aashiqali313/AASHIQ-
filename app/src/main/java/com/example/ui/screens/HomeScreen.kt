@@ -57,6 +57,7 @@ fun HomeScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val courses by viewModel.coursesState.collectAsState()
+    val allLessons by viewModel.allLessonsState.collectAsState()
     val continueWatching by viewModel.continueWatching.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
     val importProgress by viewModel.importProgress.collectAsState()
@@ -210,8 +211,10 @@ fun HomeScreen(
                     }
                 } else {
                     items(courses, key = { it.id }) { course ->
+                        val lessonsOfCourse = allLessons.filter { it.courseId == course.id }
                         CourseRowItem(
                             course = course,
+                            lessons = lessonsOfCourse,
                             onCourseClick = { onNavigateToCourseDetail(it.id) }
                         )
                     }
@@ -222,8 +225,8 @@ fun HomeScreen(
                 ProfileEditDialog(
                     profile = userProfile,
                     onDismiss = { showProfileEditDialog = false },
-                    onSave = { name, age, gender, watchTime, streak ->
-                        viewModel.updateProfile(name, age, gender, watchTime, streak)
+                    onSave = { name, age, gender, avatarUri ->
+                        viewModel.updateProfile(name, age, gender, avatarUri)
                         showProfileEditDialog = false
                     }
                 )
@@ -234,6 +237,15 @@ fun HomeScreen(
                 CertificateViewDialog(
                     certificate = cert,
                     onDismiss = { selectedCertificateToView = null }
+                )
+            }
+
+            // Real-time automatic certificate unlocked premium popup!
+            val newlyUnlockedCert by viewModel.newlyUnlockedCertificate.collectAsState()
+            if (newlyUnlockedCert != null) {
+                CertificateUnlockedDialog(
+                    certificate = newlyUnlockedCert!!,
+                    onDismiss = { viewModel.newlyUnlockedCertificate.value = null }
                 )
             }
         }
@@ -533,21 +545,42 @@ fun ContinueWatchingCard(lesson: LessonEntity, onPlayClick: () -> Unit) {
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Column {
+                val formattedDuration = remember(lesson.durationSeconds) {
+                    val hrs = lesson.durationSeconds / 3600
+                    val mins = (lesson.durationSeconds % 3600) / 60
+                    val secs = lesson.durationSeconds % 60
+                    if (hrs > 0) String.format("%02d:%02d:%02d", hrs, mins, secs)
+                    else String.format("%02d:%02d", mins, secs)
+                }
+
                 Text(
                     text = lesson.title,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Resume",
-                    fontSize = 10.sp,
-                    color = PremiumGold,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Resume",
+                        fontSize = 10.sp,
+                        color = PremiumGold,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (lesson.durationSeconds > 0) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "•  $formattedDuration",
+                            fontSize = 10.sp,
+                            color = SubduedGray,
+                            fontWeight = FontWeight.Normal
+                        )
+                    }
+                }
             }
 
             // Slim gold custom progress indicator bar
@@ -578,7 +611,23 @@ fun ContinueWatchingCard(lesson: LessonEntity, onPlayClick: () -> Unit) {
 }
 
 @Composable
-fun CourseRowItem(course: CourseEntity, onCourseClick: (CourseEntity) -> Unit) {
+fun CourseRowItem(
+    course: CourseEntity,
+    lessons: List<LessonEntity>,
+    onCourseClick: (CourseEntity) -> Unit
+) {
+    val totalSeconds = remember(lessons) { lessons.sumOf { it.durationSeconds } }
+    val formattedDuration = remember(totalSeconds) {
+        val hrs = totalSeconds / 3600
+        val mins = (totalSeconds % 3600) / 60
+        if (hrs > 0) "${hrs}h ${mins}m"
+        else "${mins}m"
+    }
+
+    val resolutionStr = remember(lessons) {
+        lessons.firstOrNull { !it.resolution.isNullOrBlank() }?.resolution
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -612,18 +661,55 @@ fun CourseRowItem(course: CourseEntity, onCourseClick: (CourseEntity) -> Unit) {
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = course.category.uppercase(),
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = PremiumGold,
-                        letterSpacing = 0.5.sp
-                    )
+                    Box(
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = course.category.uppercase(),
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PremiumGold,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+
+                    if (lessons.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "•  ${lessons.size} LESSONS",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SubduedGray,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+
+                    if (totalSeconds > 0) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "•  $formattedDuration",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SubduedGray,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+
+                    if (!resolutionStr.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "•  $resolutionStr",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SubduedGray,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -988,13 +1074,12 @@ fun CertificatesHorizontalRow(
 fun ProfileEditDialog(
     profile: UserProfileEntity,
     onDismiss: () -> Unit,
-    onSave: (name: String, age: Int, gender: String, watchTime: Long, streak: Int) -> Unit
+    onSave: (name: String, age: Int, gender: String, avatarUri: String) -> Unit
 ) {
     var name by remember { mutableStateOf(profile.name) }
     var ageStr by remember { mutableStateOf(profile.age.toString()) }
     var gender by remember { mutableStateOf(profile.gender) }
-    var watchTimeStr by remember { mutableStateOf(profile.totalWatchTimeMinutes.toString()) }
-    var streakStr by remember { mutableStateOf(profile.currentStreak.toString()) }
+    var avatarUri by remember { mutableStateOf(profile.avatarUri) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1052,21 +1137,9 @@ fun ProfileEditDialog(
                 )
 
                 OutlinedTextField(
-                    value = watchTimeStr,
-                    onValueChange = { watchTimeStr = it },
-                    label = { Text("Total Watch Time (Minutes)", color = SubduedGray) },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PremiumGold,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                        focusedLabelColor = PremiumGold
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                OutlinedTextField(
-                    value = streakStr,
-                    onValueChange = { streakStr = it },
-                    label = { Text("Streak Days (Daily Streaks)", color = SubduedGray) },
+                    value = avatarUri,
+                    onValueChange = { avatarUri = it },
+                    label = { Text("Profile Avatar / Image URI", color = SubduedGray) },
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PremiumGold,
                         unfocusedBorderColor = MaterialTheme.colorScheme.outline,
@@ -1080,9 +1153,7 @@ fun ProfileEditDialog(
             TextButton(
                 onClick = {
                     val finalAge = ageStr.toIntOrNull() ?: profile.age
-                    val finalWatchTime = watchTimeStr.toLongOrNull() ?: profile.totalWatchTimeMinutes
-                    val finalStreak = streakStr.toIntOrNull() ?: profile.currentStreak
-                    onSave(name, finalAge, gender, finalWatchTime, finalStreak)
+                    onSave(name, finalAge, gender, avatarUri)
                 }
             ) {
                 Text("SAVE", color = PremiumGold, fontWeight = FontWeight.Bold)
@@ -1243,6 +1314,148 @@ fun CertificateViewDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("CLOSE CREDENTIAL", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+fun CertificateUnlockedDialog(
+    certificate: CertificateEntity,
+    onDismiss: () -> Unit
+) {
+    var showScaleUp by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        showScaleUp = true
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.85f))
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            AnimatedVisibility(
+                visible = showScaleUp,
+                enter = scaleIn(animationSpec = tween(500, easing = FastOutSlowInEasing)) + fadeIn(tween(500)),
+                modifier = Modifier.clickable(enabled = false) {}
+            ) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .padding(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = CharcoalGray),
+                    shape = RoundedCornerShape(24.dp),
+                    border = BorderStroke(1.5.dp, PremiumGold)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .padding(24.dp)
+                            .fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Glowing Trophy Icon decoration
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .background(PremiumGold.copy(alpha = 0.15f), CircleShape)
+                                .border(1.5.dp, PremiumGold, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.EmojiEvents,
+                                contentDescription = null,
+                                tint = PremiumGold,
+                                modifier = Modifier.size(38.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        Text(
+                            text = "CONGRATULATIONS",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = PremiumGold,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 3.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "OFFLINE CERTIFICATE UNLOCKED",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            letterSpacing = 0.5.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            text = "You have officially achieved the completion milestone for:",
+                            fontSize = 12.sp,
+                            color = SubduedGray,
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Text(
+                            text = certificate.courseName,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = PremiumGold,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // Brief details preview
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Graphite, RoundedCornerShape(12.dp))
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceAround
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("RECIPIENT", fontSize = 8.sp, color = SubduedGray)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(certificate.userName, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("CREDENTIAL ID", fontSize = 8.sp, color = SubduedGray)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(certificate.certificateId, fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        Button(
+                            onClick = onDismiss,
+                            colors = ButtonDefaults.buttonColors(containerColor = PremiumGold, contentColor = Color.Black),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "CLAIM & CLOSE",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                    }
                 }
             }
         }

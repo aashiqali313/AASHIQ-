@@ -33,16 +33,73 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         .map { it ?: UserSettingsEntity() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserSettingsEntity())
 
-    // User profile and certificates states
-    val profileState: StateFlow<UserProfileEntity> = repository.userProfile
-        .map { it ?: UserProfileEntity() }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserProfileEntity())
+    val newlyUnlockedCertificate = MutableStateFlow<CertificateEntity?>(null)
+
+    private fun calculateLessonsStreak(lessons: List<LessonEntity>): Int {
+        val timestamps = lessons.map { it.lastWatchedTimestamp }.filter { it > 0 }
+        if (timestamps.isEmpty()) return 0
+
+        val timeZone = java.util.TimeZone.getDefault()
+        val epochDays = timestamps.map { 
+            (it + timeZone.getOffset(it)) / (24 * 60 * 60 * 1000L)
+        }.distinct().sortedDescending()
+
+        if (epochDays.isEmpty()) return 0
+
+        val todayMs = System.currentTimeMillis()
+        val todayEpochDay = (todayMs + timeZone.getOffset(todayMs)) / (24 * 60 * 60 * 1000L)
+
+        val latestDay = epochDays.first()
+
+        // If the last activity is older than yesterday, the streak is 0.
+        if (todayEpochDay - latestDay > 1L) {
+            return 0
+        }
+
+        var currentStreak = 1
+        var expectedDay = latestDay
+        for (i in 1 until epochDays.size) {
+            if (epochDays[i] == expectedDay - 1) {
+                currentStreak++
+                expectedDay = epochDays[i]
+            } else if (epochDays[i] < expectedDay - 1) {
+                break
+            }
+        }
+        return currentStreak
+    }
+
+    // User profile and certificates states - fully automated and reactive!
+    val profileState: StateFlow<UserProfileEntity> = combine(
+        repository.userProfile.map { it ?: UserProfileEntity() },
+        repository.allCourses,
+        repository.allLessonsFlow
+    ) { profile, courses, lessons ->
+        val totalWatchMs = lessons.sumOf { it.progressMs }
+        val totalWatchMins = totalWatchMs / 60000L
+
+        val completedCourses = courses.filter { course ->
+            val courseLessons = lessons.filter { it.courseId == course.id }
+            courseLessons.isNotEmpty() && courseLessons.all { it.playProgressPercent >= 90 }
+        }.size
+
+        val streak = calculateLessonsStreak(lessons)
+
+        profile.copy(
+            totalWatchTimeMinutes = totalWatchMins,
+            completedCoursesCount = completedCourses,
+            currentStreak = streak
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UserProfileEntity())
 
     val certificatesState: StateFlow<List<CertificateEntity>> = repository.allCertificates
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // All available courses
     val coursesState: StateFlow<List<CourseEntity>> = repository.allCourses
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allLessonsState: StateFlow<List<LessonEntity>> = repository.allLessonsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Books, settings, continue watching
@@ -208,6 +265,48 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val percent = ((currentPosMs * 100) / totalDurationMs).coerceIn(0, 100).toInt()
         viewModelScope.launch(Dispatchers.IO) {
             repository.updateLessonProgress(lessonId, currentPosMs, percent)
+            // AFTER updating lesson progress, check for automatic certificate generation!
+            checkAndGenerateCertificateForCourseOfLesson(lessonId)
+        }
+    }
+
+    private suspend fun checkAndGenerateCertificateForCourseOfLesson(lessonId: String) {
+        val lesson = repository.getLessonById(lessonId) ?: return
+        val courseId = lesson.courseId
+        val course = repository.getCourseById(courseId) ?: return
+
+        // 1. Check if a certificate already exists
+        val existing = repository.getCertificateByCourse(courseId)
+        if (existing != null) return // Already generated!
+
+        // 2. Fetch all lessons and calculate completion percent
+        val lessons = repository.getLessonsForCourseDirect(courseId)
+        if (lessons.isEmpty()) return
+
+        val completedCount = lessons.count { it.playProgressPercent >= 90 }
+        val completionPercent = (completedCount * 100) / lessons.size
+
+        // 3. Compare with settings threshold
+        val settings = repository.getSettingsDirect()
+        val threshold = settings.certificateThresholdPercent
+
+        if (completionPercent >= threshold) {
+            val profile = repository.getUserProfileDirect()
+            val certId = "CERT-" + UUID.randomUUID().toString().take(6).uppercase()
+            val cleanSignature = "AASHIQ_CERT_${UUID.randomUUID().toString().take(8).uppercase()}"
+
+            val certificate = CertificateEntity(
+                certificateId = certId,
+                userName = profile.name,
+                courseId = courseId,
+                courseName = course.title,
+                completionDate = System.currentTimeMillis(),
+                hashSignature = cleanSignature
+            )
+            repository.insertCertificate(certificate)
+            
+            // Set newly unlocked certificate to trigger premium UI/popup!
+            newlyUnlockedCertificate.value = certificate
         }
     }
 
@@ -237,30 +336,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun updateProfile(name: String, age: Int, gender: String, totalWatchTimeMinutes: Long, currentStreak: Int) {
+    fun updateProfile(name: String, age: Int, gender: String, avatarUri: String) {
         viewModelScope.launch {
             val current = repository.getUserProfileDirect()
             val updated = current.copy(
                 name = name,
                 age = age,
                 gender = gender,
-                totalWatchTimeMinutes = totalWatchTimeMinutes,
-                currentStreak = currentStreak,
+                avatarUri = avatarUri,
                 lastActiveTimestamp = System.currentTimeMillis()
             )
             repository.saveUserProfile(updated)
         }
     }
 
-    fun incrementWatchTime(minutes: Long) {
-        viewModelScope.launch {
-            val current = repository.getUserProfileDirect()
-            repository.saveUserProfile(current.copy(totalWatchTimeMinutes = current.totalWatchTimeMinutes + minutes))
-        }
-    }
-
     fun claimCertificate(courseId: String, courseName: String) {
         viewModelScope.launch {
+            val existing = repository.getCertificateByCourse(courseId)
+            if (existing != null) return@launch
+            
             val profile = repository.getUserProfileDirect()
             val cleanSignature = "AASHIQ_CERT_${UUID.randomUUID().toString().take(8).uppercase()}"
             val certificate = CertificateEntity(
@@ -272,9 +366,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 hashSignature = cleanSignature
             )
             repository.insertCertificate(certificate)
-            
-            // Increment completed courses count in profile
-            repository.saveUserProfile(profile.copy(completedCoursesCount = profile.completedCoursesCount + 1))
         }
     }
 

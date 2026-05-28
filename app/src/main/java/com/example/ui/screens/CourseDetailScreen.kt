@@ -461,7 +461,8 @@ fun LessonRowItem(lesson: LessonEntity, onLessonClick: () -> Unit) {
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         text = "READY FOR OFFLINE",
@@ -471,11 +472,64 @@ fun LessonRowItem(lesson: LessonEntity, onLessonClick: () -> Unit) {
                         fontWeight = FontWeight.Bold
                     )
 
+                    val durationStr = remember(lesson.durationSeconds) {
+                        if (lesson.durationSeconds <= 0) ""
+                        else {
+                            val hrs = lesson.durationSeconds / 3600
+                            val mins = (lesson.durationSeconds % 3600) / 60
+                            val secs = lesson.durationSeconds % 60
+                            if (hrs > 0) String.format("%02d:%02d:%02d", hrs, mins, secs)
+                            else String.format("%02d:%02d", mins, secs)
+                        }
+                    }
+
+                    if (durationStr.isNotEmpty()) {
+                        Text(
+                            text = "•  $durationStr",
+                            color = SubduedGray,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    val sizeStr = remember(lesson.fileSize) {
+                        if (lesson.fileSize <= 0) ""
+                        else {
+                            val kb = lesson.fileSize / 1024.0
+                            val mb = kb / 1024.0
+                            val gb = mb / 1024.0
+                            when {
+                                gb >= 1.0 -> String.format("%.1f GB", gb)
+                                mb >= 1.0 -> String.format("%.1f MB", mb)
+                                else -> String.format("%.1f KB", kb)
+                            }
+                        }
+                    }
+
+                    if (sizeStr.isNotEmpty()) {
+                        Text(
+                            text = "•  $sizeStr",
+                            color = SubduedGray,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    if (!lesson.resolution.isNullOrBlank()) {
+                        Text(
+                            text = "•  ${lesson.resolution}",
+                            color = SubduedGray,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
                     if (lesson.playProgressPercent > 0) {
                         Text(
-                            text = "${lesson.playProgressPercent}% Watched",
+                            text = "•  ${lesson.playProgressPercent}% Watched",
                             fontSize = 9.sp,
-                            color = SoftGoldGlow
+                            color = SoftGoldGlow,
+                            fontWeight = FontWeight.Bold
                         )
                     }
 

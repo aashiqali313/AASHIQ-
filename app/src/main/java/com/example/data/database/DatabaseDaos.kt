@@ -41,11 +41,17 @@ interface ModuleDao {
 
 @Dao
 interface LessonDao {
+    @Query("SELECT * FROM lessons")
+    fun getAllLessonsFlow(): Flow<List<LessonEntity>>
+
     @Query("SELECT * FROM lessons WHERE moduleId = :moduleId ORDER BY orderIndex ASC")
     fun getLessonsForModule(moduleId: String): Flow<List<LessonEntity>>
 
     @Query("SELECT * FROM lessons WHERE courseId = :courseId ORDER BY orderIndex ASC")
     fun getLessonsForCourse(courseId: String): Flow<List<LessonEntity>>
+
+    @Query("SELECT * FROM lessons WHERE courseId = :courseId ORDER BY orderIndex ASC")
+    suspend fun getLessonsForCourseDirect(courseId: String): List<LessonEntity>
 
     @Query("SELECT * FROM lessons WHERE id = :id LIMIT 1")
     suspend fun getLessonById(id: String): LessonEntity?
