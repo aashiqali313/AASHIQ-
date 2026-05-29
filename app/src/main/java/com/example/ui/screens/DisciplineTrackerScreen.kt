@@ -1062,8 +1062,18 @@ fun HabitItemInteractiveCard(
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.width(6.dp))
+                            val unitText = if (habit.type == "timer") {
+                                val seconds = habit.dailyTargetValue.toInt()
+                                val h = seconds / 3600
+                                val m = (seconds % 3600) / 60
+                                val s = seconds % 60
+                                if (h > 0) String.format("/ %02dh %02dm %02ds", h, m, s)
+                                else String.format("/ %02dm %02ds", m, s)
+                            } else {
+                                "/ ${habit.dailyTargetValue.toInt()} ${habit.targetUnit}"
+                            }
                             Text(
-                                text = "/ ${habit.dailyTargetValue.toInt()} ${habit.targetUnit}",
+                                text = unitText,
                                 fontSize = 11.sp,
                                 color = SubduedGray,
                                 fontFamily = FontFamily.Monospace
@@ -1458,39 +1468,232 @@ fun HabitCustomizerDialog(
                 // If non-checkbox, target values
                 if (type != "checkbox") {
                     item {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("DAILY TARGET", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PremiumGold)
-                                Spacer(modifier = Modifier.height(6.dp))
-                                OutlinedTextField(
-                                    value = targetValue,
-                                    onValueChange = { targetValue = it },
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor = WarmWhite,
-                                        unfocusedTextColor = WarmWhite,
-                                        focusedBorderColor = PremiumGold,
-                                        unfocusedBorderColor = Color.White.copy(alpha = 0.1f)
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                        if (type == "timer") {
+                            // Premium Glassmorphic Duration Picker
+                            var pickedHours by remember { 
+                                val totalSecs = targetValue.toFloatOrNull()?.toInt() ?: 1800
+                                mutableStateOf(totalSecs / 3600) 
                             }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("UNIT TYPE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PremiumGold)
-                                Spacer(modifier = Modifier.height(6.dp))
-                                OutlinedTextField(
-                                    value = targetUnit,
-                                    onValueChange = { targetUnit = it },
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor = WarmWhite,
-                                        unfocusedTextColor = WarmWhite,
-                                        focusedBorderColor = PremiumGold,
-                                        unfocusedBorderColor = Color.White.copy(alpha = 0.1f)
-                                    ),
-                                    modifier = Modifier.fillMaxWidth()
+                            var pickedMinutes by remember { 
+                                val totalSecs = targetValue.toFloatOrNull()?.toInt() ?: 1800
+                                mutableStateOf((totalSecs % 3600) / 60) 
+                            }
+                            var pickedSeconds by remember { 
+                                val totalSecs = targetValue.toFloatOrNull()?.toInt() ?: 1800
+                                mutableStateOf(totalSecs % 60) 
+                            }
+
+                            // Automatically synchronize targetValue and targetUnit
+                            LaunchedEffect(pickedHours, pickedMinutes, pickedSeconds) {
+                                val totalSecs = (pickedHours * 3600) + (pickedMinutes * 60) + pickedSeconds
+                                targetValue = totalSecs.toString()
+                                targetUnit = "sec"
+                            }
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.White.copy(alpha = 0.03f), RoundedCornerShape(16.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                                    .padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = "DURATION CONFIGURATION",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PremiumGold,
+                                    letterSpacing = 1.sp
                                 )
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // Clock text displays
+                                Text(
+                                    text = String.format("%02d hr | %02d min | %02d sec", pickedHours, pickedMinutes, pickedSeconds),
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = PremiumGold,
+                                    fontFamily = FontFamily.Monospace,
+                                    letterSpacing = 0.5.sp
+                                )
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Row of selectors
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // HOURS COLUMN
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("HOURS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = SubduedGray)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        IconButton(
+                                            onClick = { pickedHours = (pickedHours + 1).coerceAtMost(23) },
+                                            modifier = Modifier.size(32.dp).background(Color.White.copy(alpha = 0.03f), CircleShape)
+                                        ) {
+                                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Add Hour", tint = PremiumGold, modifier = Modifier.size(16.dp))
+                                        }
+                                        Text(
+                                            text = String.format("%02d", pickedHours),
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = WarmWhite,
+                                            fontFamily = FontFamily.Monospace,
+                                            modifier = Modifier.padding(vertical = 4.dp)
+                                        )
+                                        IconButton(
+                                            onClick = { pickedHours = (pickedHours - 1).coerceAtLeast(0) },
+                                            modifier = Modifier.size(32.dp).background(Color.White.copy(alpha = 0.03f), CircleShape)
+                                        ) {
+                                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Sub Hour", tint = PremiumGold, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+
+                                    // Separator
+                                    Text(":", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.15f))
+
+                                    // MINUTES COLUMN
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("MINUTES", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = SubduedGray)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        IconButton(
+                                            onClick = { pickedMinutes = (pickedMinutes + 1).coerceAtMost(59) },
+                                            modifier = Modifier.size(32.dp).background(Color.White.copy(alpha = 0.03f), CircleShape)
+                                        ) {
+                                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Add Minute", tint = PremiumGold, modifier = Modifier.size(16.dp))
+                                        }
+                                        Text(
+                                            text = String.format("%02d", pickedMinutes),
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = WarmWhite,
+                                            fontFamily = FontFamily.Monospace,
+                                            modifier = Modifier.padding(vertical = 4.dp)
+                                        )
+                                        IconButton(
+                                            onClick = { pickedMinutes = (pickedMinutes - 1).coerceAtLeast(0) },
+                                            modifier = Modifier.size(32.dp).background(Color.White.copy(alpha = 0.03f), CircleShape)
+                                        ) {
+                                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Sub Minute", tint = PremiumGold, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+
+                                    // Separator
+                                    Text(":", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.15f))
+
+                                    // SECONDS COLUMN
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("SECONDS", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = SubduedGray)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        IconButton(
+                                            onClick = { pickedSeconds = (pickedSeconds + 1).coerceAtMost(59) },
+                                            modifier = Modifier.size(32.dp).background(Color.White.copy(alpha = 0.03f), CircleShape)
+                                        ) {
+                                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Add Second", tint = PremiumGold, modifier = Modifier.size(16.dp))
+                                        }
+                                        Text(
+                                            text = String.format("%02d", pickedSeconds),
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = WarmWhite,
+                                            fontFamily = FontFamily.Monospace,
+                                            modifier = Modifier.padding(vertical = 4.dp)
+                                        )
+                                        IconButton(
+                                            onClick = { pickedSeconds = (pickedSeconds - 1).coerceAtLeast(0) },
+                                            modifier = Modifier.size(32.dp).background(Color.White.copy(alpha = 0.03f), CircleShape)
+                                        ) {
+                                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Sub Second", tint = PremiumGold, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Divider(color = Color.White.copy(alpha = 0.05f))
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Text(
+                                    text = "QUICK SECURE PRESETS",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SubduedGray,
+                                    letterSpacing = 0.5.sp
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // Preset Row
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val presets = listOf(
+                                        Pair("5 Min", 300),
+                                        Pair("10 Min", 600),
+                                        Pair("15 Min", 900),
+                                        Pair("30 Min", 1800),
+                                        Pair("1 Hr", 3600)
+                                    )
+                                    presets.forEach { (label, durationSecs) ->
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Color.White.copy(alpha = 0.03f))
+                                                .border(0.5.dp, PremiumGold.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                                                .clickable {
+                                                    pickedHours = durationSecs / 3600
+                                                    pickedMinutes = (durationSecs % 3600) / 60
+                                                    pickedSeconds = durationSecs % 60
+                                                }
+                                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = PremiumGold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("DAILY TARGET", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PremiumGold)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    OutlinedTextField(
+                                        value = targetValue,
+                                        onValueChange = { targetValue = it },
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = WarmWhite,
+                                            unfocusedTextColor = WarmWhite,
+                                            focusedBorderColor = PremiumGold,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.1f)
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("UNIT TYPE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = PremiumGold)
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    OutlinedTextField(
+                                        value = targetUnit,
+                                        onValueChange = { targetUnit = it },
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedTextColor = WarmWhite,
+                                            unfocusedTextColor = WarmWhite,
+                                            focusedBorderColor = PremiumGold,
+                                            unfocusedBorderColor = Color.White.copy(alpha = 0.1f)
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
                             }
                         }
                     }

@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<relativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_premium_widget"
+    android:padding="16dp">
+
+    <!-- Header Text -->
+    <textView
+        android:id="@+id/widget_subheader"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="AASHIQ+ GUILD"
+        android:textColor="#D4AF37"
+        android:textSize="9sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.15" />
+
+    <textView
+        android:id="@+id/widget_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/widget_subheader"
+        android:text="DAILY DISCIPLINE"
+        android:textColor="#FFFFFF"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:layout_marginTop="2dp" />
+
+    <!-- Progress Ring & Streak Info Container -->
+    <linearLayout
+        android:id="@+id/widget_info"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/widget_title"
+        android:orientation="vertical"
+        android:layout_marginTop="10dp"
+        android:layout_above="@+id/widget_bottom_bar">
+
+        <textView
+            android:id="@+id/widget_completion"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Daily Habits: 3 / 5 Done (60%)"
+            android:textColor="#F5F5F7"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <progressBar
+            android:id="@+id/widget_progress_bar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="6dp"
+            android:layout_marginTop="6dp"
+            android:max="100"
+            android:progress="60"
+            android:progressBackgroundTint="#22FFFFFF"
+            android:progressTint="#D4AF37" />
+
+        <relativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp">
+
+            <textView
+                android:id="@+id/widget_streak_lbl"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🔥 Streak: 5 days"
+                android:textColor="#D4AF37"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <textView
+                android:id="@+id/widget_xp_ring"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentRight="true"
+                android:text="+120 Guild XP"
+                android:textColor="#D4AF37"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </relativeLayout>
+    </linearLayout>
+
+    <!-- Bottom Actions Area -->
+    <relativeLayout
+        android:id="@+id/widget_bottom_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_marginTop="8dp">
+
+        <textView
+            android:id="@+id/widget_action_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:text="LOG HABITS NOW →"
+            android:textColor="#D4AF37"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:padding="6dp" />
+    </relativeLayout>
+</relativeLayout>

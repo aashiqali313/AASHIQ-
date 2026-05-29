@@ -438,6 +438,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
             repository.updateLesson(updatedLesson)
             
+            // Trigger home screen widgets updates
+            try {
+                com.example.utils.WidgetUpdater.updateAllWidgets(getApplication())
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            
             // Checks automatic course certification!
             checkAndGenerateCertificateForCourseOfLesson(lessonId)
         }
@@ -775,6 +782,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 loggedAt = System.currentTimeMillis()
             )
             repository.insertHabitLog(log)
+            try {
+                com.example.utils.WidgetUpdater.updateAllWidgets(getApplication())
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 

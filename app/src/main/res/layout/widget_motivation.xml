@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<relativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_premium_widget"
+    android:padding="20dp">
+
+    <!-- Glowing Background Accent Icon -->
+    <textView
+        android:id="@+id/widget_quote_decorator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="“"
+        android:textColor="#33D4AF37"
+        android:textSize="48sp"
+        android:textStyle="bold"
+        android:fontFamily="serif"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentLeft="true"
+        android:layout_marginTop="-10dp"
+        android:layout_marginLeft="-5dp" />
+
+    <!-- Quote Body -->
+    <textView
+        android:id="@+id/widget_quote_text"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/widget_quote_decorator"
+        android:text="We suffer more often in imagination than in reality."
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:textStyle="italic"
+        android:lineSpacingMultiplier="1.2"
+        android:maxLines="3"
+        android:ellipsize="end"
+        android:fontFamily="serif" />
+
+    <!-- Coach / Author Attribution -->
+    <textView
+        android:id="@+id/widget_quote_author"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/widget_quote_text"
+        android:layout_alignParentRight="true"
+        android:text="— Seneca"
+        android:textColor="#D4AF37"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:layout_marginTop="8dp"
+        android:letterSpacing="0.05" />
+
+    <!-- App Brand Tag -->
+    <textView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentLeft="true"
+        android:text="AASHIQ+ CINEMATIC MIND"
+        android:textColor="#44D4AF37"
+        android:textSize="7sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.2" />
+</relativeLayout>

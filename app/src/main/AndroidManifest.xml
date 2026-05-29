@@ -22,6 +22,54 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Continue Learning App Widget Receiver -->
+        <receiver
+            android:name="com.example.widgets.ContinueLearningWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_continue_learning_info" />
+        </receiver>
+
+        <!-- Discipline App Widget Receiver -->
+        <receiver
+            android:name="com.example.widgets.DisciplineWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_discipline_info" />
+        </receiver>
+
+        <!-- Course Progress App Widget Receiver -->
+        <receiver
+            android:name="com.example.widgets.CourseProgressWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_course_progress_info" />
+        </receiver>
+
+        <!-- Motivation App Widget Receiver -->
+        <receiver
+            android:name="com.example.widgets.MotivationWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_motivation_info" />
+        </receiver>
     </application>
 
 </manifest>
